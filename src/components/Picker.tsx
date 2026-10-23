@@ -7,7 +7,15 @@ import {speciesOptions} from './SetEditor';
 import {Combobox, Portrait, TypeBadge} from './ui';
 
 /** Empty slot: search plus ranked suggestions that fit the current team. */
-export function Picker({sets, slot, usage, onPick}: {sets: PokemonSet[]; slot: number; usage: UsageSource; onPick: (s: PokemonSet) => void}) {
+export function Picker({sets, slot, usage, onPick, hidden, noMegas, onPrefs}: {
+  sets: PokemonSet[];
+  slot: number;
+  usage: UsageSource;
+  onPick: (s: PokemonSet) => void;
+  hidden: string[];
+  noMegas: boolean;
+  onPrefs: (p: {hidden?: string[]; noMegas?: boolean}) => void;
+}) {
   const deferred = useDeferredValue(sets);
   const taken = sets.map(s => s.species);
   const spOpts = useMemo(() => speciesOptions(usage, taken), [usage, taken.join()]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -16,8 +24,8 @@ export function Picker({sets, slot, usage, onPick}: {sets: PokemonSet[]; slot: n
     const threats = metaThreats(usage, 30);
     const rows = deferred.length ? threatMatrix(deferred, threats, teamField(deferred)) : [];
     const problems = rows.filter(r => r.danger >= 0.45).sort((a, b) => b.danger - a.danger).slice(0, 8).map(r => r.threat);
-    return suggestTeammates(deferred, usage, problems, 9);
-  }, [deferred, usage]);
+    return suggestTeammates(deferred, usage, problems, 9, {hidden, noMegas});
+  }, [deferred, usage, hidden, noMegas]);
 
   const takenItems = sets.map(s => s.item);
   const stale = deferred !== sets;
@@ -36,22 +44,40 @@ export function Picker({sets, slot, usage, onPick}: {sets: PokemonSet[]; slot: n
         />
       </div>
 
-      <div className="label mb-2 mt-5">{sets.length ? 'Fits your team' : 'Meta picks'}</div>
+      <div className="mb-2 mt-5 flex items-center justify-between gap-3">
+        <span className="label">{sets.length ? 'Fits your team' : 'Meta picks'}</span>
+        <button
+          className={`rounded-md border px-2 py-0.5 text-[11.5px] transition ${noMegas ? 'border-gold bg-gold/15 text-gold' : 'border-line text-dim hover:text-ink'}`}
+          onClick={() => onPrefs({noMegas: !noMegas})}
+        >
+          No Megas
+        </button>
+      </div>
       <div className={`grid gap-2 sm:grid-cols-2 xl:grid-cols-3 ${stale ? 'opacity-60' : ''}`}>
         {suggestions.map((s, i) => {
           const sp = SPECIES[s.name];
           return (
-            <button
+            <div
               key={s.name}
+              role="button"
+              tabIndex={0}
               onClick={() => onPick(metaSet(s.name, usage, takenItems))}
-              className="rise group flex gap-3 rounded-xl border border-line bg-bg/40 p-2.5 text-left transition hover:border-gold-dim hover:bg-panel-2/60"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(metaSet(s.name, usage, takenItems)); } }}
+              className="rise group relative flex cursor-pointer gap-3 rounded-xl border border-line bg-bg/40 p-2.5 text-left transition hover:border-gold-dim hover:bg-panel-2/60"
               style={{animationDelay: `${i * 20}ms`}}
             >
+              <button
+                className="absolute right-1.5 top-1.5 hidden h-5 w-5 items-center justify-center rounded text-faint hover:bg-bad/20 hover:text-bad group-hover:flex"
+                title={`Hide ${s.name} from suggestions`}
+                onClick={e => { e.stopPropagation(); onPrefs({hidden: [...hidden, s.name]}); }}
+              >
+                ×
+              </button>
               <Portrait name={s.name} size={48} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-display text-[14px] font-semibold group-hover:text-gold">{s.name}</span>
-                  <span className="num text-[11px] text-gold">{pct(s.usage)}</span>
+                  <span className="num text-[11px] text-gold group-hover:invisible">{pct(s.usage)}</span>
                 </div>
                 <div className="mt-0.5 flex gap-1">{sp.types.map(t => <TypeBadge key={t} type={t} small />)}</div>
                 {s.reasons.length > 0 && (
@@ -60,10 +86,29 @@ export function Picker({sets, slot, usage, onPick}: {sets: PokemonSet[]; slot: n
                   </ul>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
+
+      {hidden.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[12px]">
+          <span className="text-faint">Hidden:</span>
+          {hidden.map(n => (
+            <button
+              key={n}
+              className="flex items-center gap-1 rounded-md border border-line px-1.5 py-0.5 text-dim hover:border-gold-dim hover:text-ink"
+              title="Show in suggestions again"
+              onClick={() => onPrefs({hidden: hidden.filter(x => x !== n)})}
+            >
+              <Portrait name={n} size={16} className="!rounded-sm" />
+              {n}
+              <span className="text-faint">↺</span>
+            </button>
+          ))}
+          <button className="ml-1 text-faint underline hover:text-ink" onClick={() => onPrefs({hidden: []})}>Show all</button>
+        </div>
+      )}
     </div>
   );
 }
