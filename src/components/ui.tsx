@@ -82,8 +82,10 @@ export interface Option {
 
 /** Searchable select: typing filters, arrows + enter pick. */
 export function Combobox({
-  value, options, onChange, placeholder, className = '', autoFocus,
+  value, options, onChange, placeholder, className = '', autoFocus, describe,
 }: {
+  /** Shown under the open list for the highlighted option (e.g. what a move does). */
+  describe?: (value: string) => ReactNode;
   value: string;
   options: Option[];
   onChange: (v: string) => void;
@@ -149,7 +151,8 @@ export function Combobox({
         }}
       />
       {open && (
-        <div ref={listRef} className="absolute z-40 mt-1 max-h-72 w-full min-w-[220px] overflow-auto rounded-lg border border-line-2 bg-panel shadow-2xl shadow-black/50">
+        <div className="absolute z-40 mt-1 w-full min-w-[220px] border border-line-2 bg-panel shadow-2xl shadow-black/50">
+        <div ref={listRef} className="max-h-72 overflow-auto">
           {filtered.length === 0 && <div className="px-3 py-2 text-dim">No results</div>}
           {filtered.map((o, i) => {
             const showGroup = o.group && (i === 0 || filtered[i - 1].group !== o.group);
@@ -168,6 +171,10 @@ export function Combobox({
               </div>
             );
           })}
+        </div>
+        {describe && filtered[active] && (
+          <div className="border-t border-line bg-panel-2 px-3 py-2 text-[11.5px] leading-snug">{describe(filtered[active].value)}</div>
+        )}
         </div>
       )}
     </div>

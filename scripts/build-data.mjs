@@ -196,7 +196,7 @@ async function main() {
       bp: m.basePower ?? dex?.basePower ?? 0,
       // The calc's data only knows spread targets; Showdown's dex has all of them.
       target: m.target || pkmnDex.moves.get(m.name)?.target,
-      prio: m.priority || undefined,
+      prio: (m.priority ?? dex?.priority) || undefined,
       flags: Object.keys(m.flags || {}).length ? Object.keys(m.flags) : undefined,
       multihit: m.multihit,
     };
@@ -299,6 +299,15 @@ async function main() {
   validate({species, items, moves, usage});
 
   const write = (name, data) => writeFile(join(OUT, name), JSON.stringify(data));
+  // Short descriptions for tooltips (Showdown's text, incl. the Champions Mega abilities), in their own
+  // file so the site loads them only on the first hover.
+  const describe = x => (x?.exists ? x.shortDesc || x.desc || '' : '');
+  const texts = {moves: {}, items: {}, abilities: {}};
+  for (const n of Object.keys(moves)) { const t = describe(pkmnDex.moves.get(n)); if (t) texts.moves[n] = t; }
+  for (const n of items.map(i => i.name)) { const t = describe(pkmnDex.items.get(n)); if (t) texts.items[n] = t; }
+  for (const n of new Set(Object.values(species).flatMap(sp => sp.abilities))) { const t = describe(pkmnDex.abilities.get(n)); if (t) texts.abilities[n] = t; }
+  await write('texts.json', texts);
+
   // Type chart for the site's own type maths, so it doesn't need the calc library at startup.
   const typeChart = {};
   for (const t of gen.types) if (t.name !== '???' && t.name !== 'Stellar') typeChart[t.name] = Object.fromEntries(Object.entries(t.effectiveness).filter(([d, m]) => d !== '???' && d !== 'Stellar' && m !== 1));

@@ -1,5 +1,6 @@
 import {SPECIES} from '../lib/data';
 import {battleForme, type Issue, type PokemonSet} from '../lib/team';
+import {Describe} from './Describe';
 import {Portrait, TypeBadge} from './ui';
 
 export function TeamBar({
@@ -64,12 +65,12 @@ export function TeamBar({
                   {errors > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-bad" title={`${errors} error${errors > 1 ? 's' : ''}`} />}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1">{sp?.types.map(t => <TypeBadge key={t} type={t} small />)}</div>
-                <div className="mt-1 truncate text-xs text-dim">{set.item || <span className="text-faint">no item</span>}</div>
+                <div className="mt-1 truncate text-xs text-dim">{set.item ? <Describe kind="items" name={set.item}>{set.item}</Describe> : <span className="text-faint">no item</span>}</div>
               </div>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11.5px] text-ink/80">
               {[0, 1, 2, 3].map(k => (
-                <span key={k} className="truncate">{set.moves[k] || <span className="text-faint">—</span>}</span>
+                <span key={k} className="truncate">{set.moves[k] ? <Describe kind="moves" name={set.moves[k]}>{set.moves[k]}</Describe> : <span className="text-faint">—</span>}</span>
               ))}
             </div>
           </div>

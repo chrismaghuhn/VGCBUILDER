@@ -272,22 +272,22 @@ function TeamCard({team, active, q, record, folders, onOpen, onStar, onMove, onD
 
 // ------------------------------------------------------------------ Tournament teams
 
-/** Placement as a number for filtering: Champion 1, Runner Up 2, "5th" 5, "Top 8" 8; unplaced = 999. */
+/** Placement as a number for filtering: Champion 1, Runner Up 2, "5th" 5, "Top 8" 8, ladder "3790th" 3790; none = Infinity. */
 function place(rank: string): number {
   const r = rank.toLowerCase();
-  if (!r) return 999;
+  if (!r) return Infinity;
   if (r.includes('champion') || r.startsWith('1st') || r === 'winner') return 1;
   if (r.includes('runner')) return 2;
   const n = /(\d+)/.exec(r)?.[1];
-  return n ? +n : 999;
+  return n ? +n : Infinity;
 }
 const PLACES: {key: string; label: string; max: number}[] = [
-  {key: 'all', label: 'Any placement', max: 1000},
+  {key: 'all', label: 'Any placement', max: Infinity},
   {key: '1', label: 'Champions', max: 1},
   {key: '4', label: 'Top 4', max: 4},
   {key: '8', label: 'Top 8', max: 8},
   {key: '16', label: 'Top 16', max: 16},
-  {key: 'placed', label: 'Any placement listed', max: 998},
+  {key: 'placed', label: 'Any placement listed', max: Number.MAX_SAFE_INTEGER},
 ];
 
 function TournamentTeams({query, usage, folderName, onUse}: {
@@ -298,6 +298,8 @@ function TournamentTeams({query, usage, folderName, onUse}: {
   const [error, setError] = useState('');
   const [event, setEvent] = useState('');
   const [placeKey, setPlaceKey] = useState('all');
+  // Only teams whose paste has its SP spreads (the rest would get meta spreads).
+  const [withSp, setWithSp] = useState(false);
   const [limit, setLimit] = useState(48);
   // Loaded on demand so the main bundle doesn't carry ~300 kB of team data.
   useEffect(() => {
@@ -305,7 +307,7 @@ function TournamentTeams({query, usage, folderName, onUse}: {
       .then(m => setAll(m.default as unknown as TournamentTeam[]))
       .catch(e => setError((e as Error).message));
   }, []);
-  useEffect(() => setLimit(48), [query, event, placeKey]);
+  useEffect(() => setLimit(48), [query, event, placeKey, withSp]);
 
   const events = useMemo(() => {
     const latest = new Map<string, string>();
@@ -319,7 +321,7 @@ function TournamentTeams({query, usage, folderName, onUse}: {
   const q = query.trim().toLowerCase();
   const max = PLACES.find(p => p.key === placeKey)!.max;
   const shown = all.filter(t =>
-    (!event || t.event === event) && place(t.rank) <= max
+    (!event || t.event === event) && place(t.rank) <= max && (!withSp || t.spreads)
     && (!q || t.mons.some(([m]) => monMatches(m, q)) || t.player.toLowerCase().includes(q) || t.event.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)));
 
   return (
@@ -332,6 +334,10 @@ function TournamentTeams({query, usage, folderName, onUse}: {
         <select className="field !w-auto !py-1 text-xs" value={placeKey} onChange={e => setPlaceKey(e.target.value)} aria-label="Placement">
           {PLACES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
         </select>
+        <button onClick={() => setWithSp(!withSp)} title="Only teams whose paste includes their SP spreads"
+          className={`border px-2 py-0.5 text-xs ${withSp ? 'border-gold bg-gold text-black' : 'border-line-2 text-dim hover:text-ink'}`}>
+          With SP only
+        </button>
         <span className="text-dim">{shown.length} teams</span>
         <span className="ml-auto text-[11.5px] text-faint">
           Source: <a className="underline hover:text-dim" href="https://x.com/VGCPastes" target="_blank" rel="noreferrer">VGCPastes</a> repository

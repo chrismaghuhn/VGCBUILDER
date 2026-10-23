@@ -30,10 +30,16 @@ export function TeamNotes({team, allTags, onMeta}: {
     setDraft('');
   };
   return (
-    <div className="mt-3 grid gap-3 border-t border-line pt-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <div>
-        <div className="label mb-1.5">Tags</div>
+    // One centred column as wide as the set editor below: notes first, tags underneath.
+    <div className="mt-3 border-t border-line pt-3">
+      <div className="mx-auto max-w-[980px] space-y-2">
+        <div>
+          <div className="label mb-1.5">Notes</div>
+          <textarea className="field h-20 resize-y text-[12.5px]" value={team.notes ?? ''} onChange={e => onMeta({notes: e.target.value}, `team-notes-${team.id}`)}
+            placeholder="Game plan, leads, what to bring against what …" />
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <span className="label mr-1">Tags</span>
           {tags.map(t => (
             <span key={t} className="flex items-center gap-1 border border-line-2 px-1.5 text-[12px] text-dim">
               {t}
@@ -46,11 +52,6 @@ export function TeamNotes({team, allTags, onMeta}: {
             onBlur={() => draft && add(draft)} aria-label="Add tag" />
           <datalist id="team-tags">{allTags.filter(t => !tags.includes(t)).map(t => <option key={t} value={t} />)}</datalist>
         </div>
-      </div>
-      <div>
-        <div className="label mb-1.5">Notes</div>
-        <textarea className="field h-20 resize-y text-[12.5px]" value={team.notes ?? ''} onChange={e => onMeta({notes: e.target.value}, `team-notes-${team.id}`)}
-          placeholder="Game plan, leads, what to bring against what …" />
       </div>
     </div>
   );
