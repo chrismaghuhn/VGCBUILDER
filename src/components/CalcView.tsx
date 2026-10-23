@@ -1,9 +1,9 @@
 import {useMemo, useState} from 'react';
 import {ITEM_NAMES, MOVES, NATURE_NAMES, SP_MAX, SPECIES, STAT_LABEL, STATS, TYPE_COLOR, type UsageSource} from '../lib/data';
 import {metaSet, runCalc, type Boosts, type FieldOpts} from '../lib/calc';
-import {battleForme, setStats, type PokemonSet} from '../lib/team';
+import {battleForme, setStats, type Opponent, type PokemonSet} from '../lib/team';
 import {speciesOptions} from './SetEditor';
-import {Combobox, Portrait, Section, TypeBadge, dmgColor} from './ui';
+import {Combobox, EstBadge, Portrait, Section, TypeBadge, dmgColor} from './ui';
 
 export interface Side {
   set: PokemonSet;
@@ -21,18 +21,20 @@ export const makeSide = (set: PokemonSet): Side => ({
 });
 
 export function CalcView({
-  sets, usage, pair, setPair,
+  sets, usage, opp, pair, setPair,
 }: {
   sets: PokemonSet[];
   usage: UsageSource;
+  /** Opponent team to pick Pokémon B from (and start with). */
+  opp?: Opponent;
   pair: [Side, Side] | null;
   setPair: (p: [Side, Side]) => void;
 }) {
   const [field, setField] = useState<FieldOpts>({weather: '', terrain: '', crit: false, singleTarget: false});
   const fallback = useMemo<[Side, Side]>(() => {
     const top = Object.entries(usage.mons).sort((a, b) => b[1].usage - a[1].usage).map(([n]) => n);
-    return [makeSide(sets[0] ?? metaSet(top[0], usage)), makeSide(metaSet(top[1], usage))];
-  }, [sets, usage]);
+    return [makeSide(sets[0] ?? metaSet(top[0], usage)), makeSide(opp?.sets[0] ?? metaSet(top[1], usage))];
+  }, [sets, usage, opp]);
   const [a, b] = pair ?? fallback;
   const update = (i: 0 | 1, side: Side) => setPair(i === 0 ? [side, b] : [a, side]);
 
@@ -49,7 +51,7 @@ export function CalcView({
   return (
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[1fr_1.15fr_1fr]">
-        <SidePanel label="Pokémon A" side={a} onChange={s => update(0, s)} sets={sets} usage={usage} />
+        <SidePanel label="Pokémon A" side={a} onChange={s => update(0, s)} sets={sets} opp={opp} usage={usage} />
         <div className="space-y-4">
           <Results title={`${a.set.species} → ${b.set.species}`} rows={results(a, b)} />
           <Results title={`${b.set.species} → ${a.set.species}`} rows={results(b, a)} />
@@ -57,7 +59,7 @@ export function CalcView({
             <button className="btn text-xs" onClick={() => setPair([b, a])}>⇄ Swap sides</button>
           </div>
         </div>
-        <SidePanel label="Pokémon B" side={b} onChange={s => update(1, s)} sets={sets} usage={usage} />
+        <SidePanel label="Pokémon B" side={b} onChange={s => update(1, s)} sets={sets} opp={opp} usage={usage} />
       </div>
 
       <Section title="Field">
@@ -129,24 +131,32 @@ function Toggle({label, value, onChange}: {label: string; value: boolean; onChan
   );
 }
 
-function SidePanel({label, side, onChange, sets, usage}: {label: string; side: Side; onChange: (s: Side) => void; sets: PokemonSet[]; usage: UsageSource}) {
+function SidePanel({label, side, onChange, sets, opp, usage}: {label: string; side: Side; onChange: (s: Side) => void; sets: PokemonSet[]; opp?: Opponent; usage: UsageSource}) {
   const set = side.set;
   const forme = battleForme(set);
   const sp = SPECIES[forme];
   const stats = setStats(set);
   const spOpts = useMemo(() => speciesOptions(usage), [usage]);
-  const upd = (patch: Partial<PokemonSet>) => onChange({...side, set: {...set, ...patch}});
+  // Changing the nature or SP by hand makes the spread known.
+  const upd = (patch: Partial<PokemonSet>) => onChange({...side, set: {...set, ...patch, ...('sps' in patch || 'nature' in patch ? {estimated: undefined} : {})}});
+  const picks = (list: PokemonSet[], title?: string) => (
+    <div className="flex flex-wrap items-center gap-1">
+      {title && <span className="label mr-1 w-full truncate text-[10px] text-bad/80">{title}</span>}
+      {list.map((s, i) => (
+        <button key={i} onClick={() => onChange({...side, set: s})} title={s.species}
+          className={`rounded-md border p-0.5 ${s === set ? 'border-gold' : 'border-line hover:border-line-2'}`}>
+          <Portrait name={battleForme(s)} size={28} />
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <Section title={label}>
-      {sets.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-1">
-          {sets.map((s, i) => (
-            <button key={i} onClick={() => onChange({...side, set: s})} title={s.species}
-              className={`rounded-md border p-0.5 ${s === set ? 'border-gold' : 'border-line hover:border-line-2'}`}>
-              <Portrait name={battleForme(s)} size={28} />
-            </button>
-          ))}
+      {(sets.length > 0 || opp) && (
+        <div className="mb-3 space-y-2">
+          {sets.length > 0 && picks(sets)}
+          {opp && picks(opp.sets, opp.name)}
         </div>
       )}
       <div className="flex items-center gap-3">
@@ -184,7 +194,7 @@ function SidePanel({label, side, onChange, sets, usage}: {label: string; side: S
         <thead>
           <tr className="text-faint">
             <th className="text-left font-normal" />
-            <th className="font-normal">SP</th>
+            <th className="font-normal">{set.estimated ? <span className="inline-flex items-center gap-1">SP <EstBadge /></span> : 'SP'}</th>
             <th className="font-normal">Boost</th>
             <th className="text-right font-normal">Stat</th>
           </tr>

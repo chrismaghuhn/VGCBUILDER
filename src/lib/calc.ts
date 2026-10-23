@@ -1,7 +1,7 @@
 import {Field, Generations, Move, Pokemon, calculate} from '@smogon/calc';
 import {MOVES, SPECIES, TYPES, type StatID, type UsageSource} from './data';
 import {battleForme, parseSpread, popularSet, type PokemonSet} from './team';
-import {damagingMoves, defensiveMult, effectiveSpeed, metaWeather, roleCoverage, typeEffect, type EnemyWeather, type SpeedField} from './analysis';
+import {damagingMoves, defensiveMult, effectiveSpeed, roleCoverage, typeEffect, type EnemyWeather, type SpeedField} from './analysis';
 
 export const GEN = Generations.get(0);
 
@@ -147,6 +147,13 @@ export function metaThreats(usage: UsageSource, limit = 30): MetaThreat[] {
     });
 }
 
+/** One opponent team as threats: their own sets, every damaging move they carry. */
+export function teamThreats(opp: PokemonSet[]): MetaThreat[] {
+  return opp.filter(s => SPECIES[s.species]).map(set => ({
+    name: battleForme(set), usage: 0, lead: 0, set, attacks: damagingMoves(set),
+  }));
+}
+
 export interface HitSummary {
   move: string;
   maxPct: number;
@@ -175,12 +182,12 @@ export interface ThreatRow {
 }
 
 /**
- * With `enemyWeather` each threat plays under the weather its team usually brings
+ * With `enemyWeather` each threat plays under the weather its team brings
  * (weather war worst case: their setter wins).
  */
 export function threatMatrix(
   sets: PokemonSet[], threats: MetaThreat[], field: SpeedField = {weather: ''},
-  enemyWeather?: {usage: UsageSource},
+  enemyWeather?: (threat: string) => EnemyWeather | null,
 ): ThreatRow[] {
   const mySpeed = new Map<string, number[]>();
   const speedsFor = (f: SpeedField) => {
@@ -189,7 +196,7 @@ export function threatMatrix(
     return mySpeed.get(key)!;
   };
   return threats.map(threat => {
-    const own = enemyWeather ? metaWeather(threat.name, enemyWeather.usage) : null;
+    const own = enemyWeather?.(threat.name) ?? null;
     const rowField: SpeedField = own ? {...field, weather: own.weather} : field;
     const calcField: FieldOpts = {weather: rowField.weather, terrain: rowField.electricTerrain ? 'Electric' : ''};
     const speeds = speedsFor(rowField);

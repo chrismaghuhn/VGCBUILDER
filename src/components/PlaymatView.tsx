@@ -1,5 +1,5 @@
 import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
-import {SPECIES, TYPE_COLOR, MOVES, pct, type UsageSource} from '../lib/data';
+import {SPECIES, STAT_LABEL, STATS, TYPE_COLOR, MOVES, pct, type UsageSource} from '../lib/data';
 import {WEATHER_LABEL, teamField} from '../lib/analysis';
 import {metaSet} from '../lib/calc';
 import {leadAdvice, rankPlans} from '../lib/matchup';
@@ -16,7 +16,7 @@ import {Empty} from './AnalysisView';
 import {koLabel} from './MetaView';
 import {speciesOptions} from './SetEditor';
 import {Sprite} from './Sprite';
-import {Combobox, Portrait, Section, dmgColor} from './ui';
+import {Combobox, EstBadge, Portrait, Section, dmgColor} from './ui';
 
 const BOARD_BG =
   'repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 24px), repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 24px), #050505';
@@ -622,7 +622,7 @@ function Bench({side, ids, mat, sets, selected, onSelect, drag, onGrab, onToggle
                 className={`flex cursor-grab touch-none select-none flex-col items-center rounded-lg px-1.5 pt-1 transition active:cursor-grabbing ${selected === key ? 'bg-gold/15' : 'hover:bg-white/5'} ${active || (drag?.side === side && drag.index === i) ? 'opacity-40' : ''}`}
                 title={active ? 'On the field' : 'Drag onto a spot'}>
                 <div className="flex h-14 items-end"><Sprite name={battleForme(matSet(mat, key, list[i]))} facing={side === 'mine' ? 'up' : 'down'} fit={56} offset={k * 13} /></div>
-                <span className="text-[11px] text-dim">{list[i].species}</span>
+                <span className="flex items-center gap-1 text-[11px] text-dim">{list[i].species}{list[i].estimated && <span className="text-faint" title="Spread estimated from usage data">*</span>}</span>
               </button>
               {side === 'mine' && (
                 <button onClick={() => onToggleBrought?.(i)} title={brought ? 'Brought (click to leave home)' : 'Stays home (click to bring)'}
@@ -709,6 +709,10 @@ function Inspector({mat, me, foes, onHp, onBoost}: {
             <div className={`label ${me.side === 'mine' ? 'text-info' : 'text-bad'}`}>{me.side === 'mine' ? 'Yours' : 'Theirs'}</div>
             <div className="truncate font-display text-lg font-semibold">{me.set.species}</div>
             <div className="truncate text-[11.5px] text-dim">{me.set.item} · {sp?.mega ? sp.abilities[0] : me.set.ability}</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-faint">
+              <span className="truncate">{me.set.nature} · {STATS.filter(s => me.set.sps[s]).map(s => `${me.set.sps[s]} ${STAT_LABEL[s]}`).join(' / ') || 'no SP'}</span>
+              {me.set.estimated && <EstBadge />}
+            </div>
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2 text-[12px]">
@@ -732,7 +736,7 @@ function Inspector({mat, me, foes, onHp, onBoost}: {
       {!foes.length && <div className="panel p-4 text-[13px] text-dim">Put Pokémon on the other side to see calcs.</div>}
       {foes.map(foe => (
         <div key={foe.key} className="panel p-4">
-          <div className="label mb-2">vs {foe.set.species}</div>
+          <div className="mb-2 flex items-center gap-1.5"><span className="label">vs {foe.set.species}</span>{foe.set.estimated && <EstBadge />}</div>
           <HitList title={`${me.set.species} →`} hits={matHits(mat, me, foe)} />
           <div className="mt-2" />
           <HitList title={`← ${foe.set.species}`} hits={matHits(mat, foe, me)} incoming />
@@ -807,7 +811,7 @@ function OpponentPicker({usage, onSet}: {usage: UsageSource; onSet: (name: strin
   const fill = (team: PokemonSet[]) => team.map(s => {
     if (Object.values(s.sps).some(v => v > 0)) return s;
     const meta = metaSet(s.species, usage);
-    return {...s, nature: meta.nature, sps: meta.sps, item: s.item || meta.item, ability: s.ability || meta.ability, moves: s.moves.length ? s.moves : meta.moves};
+    return {...s, nature: meta.nature, sps: meta.sps, item: s.item || meta.item, ability: s.ability || meta.ability, moves: s.moves.length ? s.moves : meta.moves, estimated: true};
   });
 
   const load = async () => {
@@ -836,7 +840,7 @@ function OpponentPicker({usage, onSet}: {usage: UsageSource; onSet: (name: strin
       nums.add(m.num);
       if (team.length === 6) break;
     }
-    onSet(`${name} core`, team.map(n => metaSet(n, usage)));
+    onSet(`${name} core`, team.map(n => ({...metaSet(n, usage), estimated: true})));
   };
 
   return (
@@ -850,7 +854,7 @@ function OpponentPicker({usage, onSet}: {usage: UsageSource; onSet: (name: strin
             <button className="btn btn-gold" onClick={load} disabled={!text.trim()}>Load opponent</button>
             {error && <span className="text-[12px] text-bad">{error}</span>}
           </div>
-          <p className="mt-2 text-[11.5px] text-faint">Missing spreads are filled with the most common meta spread.</p>
+          <p className="mt-2 text-[11.5px] text-faint">Missing spreads are filled with the most common meta spread and marked <EstBadge className="inline-block align-middle" />.</p>
         </div>
         <div>
           <div className="label mb-1">Or start from a meta core</div>
