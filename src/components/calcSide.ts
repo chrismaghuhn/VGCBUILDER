@@ -13,6 +13,10 @@ export interface Side {
   lightScreen: boolean;
   auroraVeil: boolean;
   friendGuard: boolean;
+  /** This Pokémon is burned. */
+  burned?: boolean;
+  /** Its partner has Steely Spirit. */
+  steelySpirit?: boolean;
 }
 
 export const makeSide = (set: PokemonSet): Side => ({

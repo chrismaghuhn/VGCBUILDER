@@ -1,6 +1,7 @@
 import {useMemo, useState} from 'react';
 import {ITEM_NAMES, MOVES, NATURE_NAMES, SP_MAX, SPECIES, STAT_LABEL, STATS, TYPE_COLOR, type UsageSource} from '../lib/data';
 import {metaSet, runCalc, type FieldOpts} from '../lib/calc';
+import {autoField} from '../lib/analysis';
 import {battleForme, setStats, type Opponent, type PokemonSet} from '../lib/team';
 import {makeSide, type Side} from './calcSide';
 import {speciesOptions} from './SetEditor';
@@ -18,19 +19,28 @@ export function CalcView({
   pair: [Side, Side] | null;
   setPair: (p: [Side, Side]) => void;
 }) {
-  const [field, setField] = useState<FieldOpts>({weather: '', terrain: '', crit: false, singleTarget: false});
+  const [field, setField] = useState<FieldOpts>({crit: false, singleTarget: false});
+  // Weather and terrain follow the two Pokémon's abilities unless picked by hand.
+  const [weatherSel, setWeatherSel] = useState<'auto' | NonNullable<FieldOpts['weather']>>('auto');
+  const [terrainSel, setTerrainSel] = useState<'auto' | NonNullable<FieldOpts['terrain']>>('auto');
+  // Hits for variable multi-hit moves, per move.
+  const [hits, setHits] = useState<Record<string, number>>({});
   const fallback = useMemo<[Side, Side]>(() => {
     const top = Object.entries(usage.mons).sort((a, b) => b[1].usage - a[1].usage).map(([n]) => n);
     return [makeSide(sets[0] ?? metaSet(top[0], usage)), makeSide(opp?.sets[0] ?? metaSet(top[1], usage))];
   }, [sets, usage, opp]);
   const [a, b] = pair ?? fallback;
+  const auto = autoField(a.set, b.set);
+  const weather = weatherSel === 'auto' ? (auto.weather?.value ?? '') : weatherSel;
+  const terrain = terrainSel === 'auto' ? (auto.terrain?.value ?? '') : terrainSel;
   const update = (i: 0 | 1, side: Side) => setPair(i === 0 ? [side, b] : [a, side]);
 
   const results = (atk: Side, def: Side) =>
     atk.set.moves.filter(Boolean).map(m => ({
       move: m,
       out: MOVES[m]?.cat === 'Status' ? null : runCalc(atk.set, def.set, m, {
-        ...field,
+        ...field, weather, terrain,
+        burn: atk.burned, steelySpirit: atk.steelySpirit, hits: hits[m],
         helpingHand: atk.helpingHand,
         reflect: def.reflect, lightScreen: def.lightScreen, auroraVeil: def.auroraVeil, friendGuard: def.friendGuard,
       }, atk.boosts, def.boosts, def.hp),
@@ -41,8 +51,8 @@ export function CalcView({
       <div className="grid gap-4 xl:grid-cols-[1fr_1.15fr_1fr]">
         <SidePanel label="Pokémon A" side={a} onChange={s => update(0, s)} sets={sets} opp={opp} usage={usage} />
         <div className="space-y-4">
-          <Results title={`${a.set.species} → ${b.set.species}`} rows={results(a, b)} />
-          <Results title={`${b.set.species} → ${a.set.species}`} rows={results(b, a)} />
+          <Results title={`${a.set.species} → ${b.set.species}`} rows={results(a, b)} hits={hits} onHits={(m, n) => setHits({...hits, [m]: n})} />
+          <Results title={`${b.set.species} → ${a.set.species}`} rows={results(b, a)} hits={hits} onHits={(m, n) => setHits({...hits, [m]: n})} />
           <div className="flex justify-center">
             <button className="btn text-xs" onClick={() => setPair([b, a])}>⇄ Swap sides</button>
           </div>
@@ -54,25 +64,45 @@ export function CalcView({
         <div className="flex flex-wrap items-end gap-4">
           <label className="block">
             <div className="label mb-1">Weather</div>
-            <select className="field !w-36" value={field.weather} onChange={e => setField({...field, weather: e.target.value as FieldOpts['weather']})}>
+            <select className="field !w-auto" value={weatherSel} onChange={e => setWeatherSel(e.target.value as typeof weatherSel)}
+              title={auto.weather ? `${auto.weather.value} ${auto.weather.why}` : 'Neither Pokémon sets weather'}>
+              <option value="auto">Auto · {auto.weather ? `${auto.weather.value} (${auto.weather.why.replace(/^from /, '').split(':')[0]})` : 'none'}</option>
               {['', 'Sun', 'Rain', 'Sand', 'Snow'].map(w => <option key={w} value={w}>{w || 'None'}</option>)}
             </select>
           </label>
           <label className="block">
             <div className="label mb-1">Terrain</div>
-            <select className="field !w-36" value={field.terrain} onChange={e => setField({...field, terrain: e.target.value as FieldOpts['terrain']})}>
+            <select className="field !w-auto" value={terrainSel} onChange={e => setTerrainSel(e.target.value as typeof terrainSel)}
+              title={auto.terrain ? `${auto.terrain.value} Terrain ${auto.terrain.why}` : 'Neither Pokémon sets terrain'}>
+              <option value="auto">Auto · {auto.terrain ? `${auto.terrain.value} (${auto.terrain.why.replace(/^from /, '').split(':')[0]})` : 'none'}</option>
               {['', 'Electric', 'Grassy', 'Psychic', 'Misty'].map(w => <option key={w} value={w}>{w || 'None'}</option>)}
             </select>
           </label>
           <Toggle label="Critical hit" value={!!field.crit} onChange={v => setField({...field, crit: v})} />
           <Toggle label="Spread: single target" value={!!field.singleTarget} onChange={v => setField({...field, singleTarget: v})} />
         </div>
+        {(auto.weather?.why.includes(':') || auto.terrain?.why.includes(':')) && (
+          <p className="mt-2 text-[11.5px] text-dim">
+            {[auto.weather && auto.weather.why.includes(':') && `${auto.weather.value} ${auto.weather.why}`, auto.terrain && auto.terrain.why.includes(':') && `${auto.terrain.value} Terrain ${auto.terrain.why}`].filter(Boolean).join(' · ')}.
+          </p>
+        )}
       </Section>
     </div>
   );
 }
 
-function Results({title, rows}: {title: string; rows: {move: string; out: ReturnType<typeof runCalc>}[]}) {
+/** Possible hit counts of a variable multi-hit move (Bullet Seed 2–5, Population Bomb 1–10); null for others. */
+function hitRange(move: string): number[] | null {
+  const mh = MOVES[move]?.multihit;
+  if (Array.isArray(mh)) return Array.from({length: mh[1] - mh[0] + 1}, (_, i) => mh[0] + i);
+  if (mh === 10) return Array.from({length: 10}, (_, i) => i + 1);
+  return null;
+}
+
+function Results({title, rows, hits, onHits}: {
+  title: string; rows: {move: string; out: ReturnType<typeof runCalc>}[];
+  hits: Record<string, number>; onHits: (move: string, n: number) => void;
+}) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <Section title={title}>
@@ -87,6 +117,13 @@ function Results({title, rows}: {title: string; rows: {move: string; out: Return
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{background: TYPE_COLOR[mv?.type] ?? '#555'}} />
                   <span className="w-32 truncate text-[13px] font-medium">{move}</span>
+                  {hitRange(move) && (
+                    <select className="field !w-auto !px-1 !py-0 text-[11px]" value={hits[move] ?? ''} onClick={e => e.stopPropagation()}
+                      onChange={e => onHits(move, +e.target.value)} title="Number of hits" aria-label={`Hits of ${move}`}>
+                      <option value="" disabled>hits</option>
+                      {hitRange(move)!.map(n => <option key={n} value={n}>{n}×</option>)}
+                    </select>
+                  )}
                   <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-line">
                     {out && <>
                       <div className="absolute inset-y-0 left-0 rounded-full opacity-40" style={{width: `${Math.min(100, p * 100)}%`, background: dmgColor(p)}} />
@@ -231,6 +268,8 @@ function SidePanel({label, side, onChange, sets, opp, usage}: {label: string; si
         <Toggle label="Aurora Veil" value={side.auroraVeil} onChange={v => onChange({...side, auroraVeil: v})} />
         <Toggle label="Friend Guard" value={side.friendGuard} onChange={v => onChange({...side, friendGuard: v})} />
         <Toggle label="Intimidate (−1 Atk)" value={side.boosts.atk === -1} onChange={v => onChange({...side, boosts: {...side.boosts, atk: v ? -1 : 0}})} />
+        <Toggle label="Burned" value={!!side.burned} onChange={v => onChange({...side, burned: v})} />
+        <Toggle label="Ally Steely Spirit" value={!!side.steelySpirit} onChange={v => onChange({...side, steelySpirit: v})} />
       </div>
     </Section>
   );

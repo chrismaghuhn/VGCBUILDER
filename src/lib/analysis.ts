@@ -400,3 +400,29 @@ export function teamSpeeds(sets: PokemonSet[], field: SpeedField): SpeedEntry[] 
     return {name: battleForme(s), speed, mine: true, boosts: labels, note: notes.join(' · ')};
   });
 }
+
+const TERRAIN_SETTERS: Record<string, 'Electric' | 'Grassy' | 'Psychic' | 'Misty'> = {
+  'Electric Surge': 'Electric', 'Grassy Surge': 'Grassy', 'Psychic Surge': 'Psychic', 'Misty Surge': 'Misty', 'Hadron Engine': 'Electric',
+};
+
+/**
+ * Weather and terrain two Pokémon bring onto the field by themselves (Calc). When both set one, the
+ * one that acts last wins, as in the weather war: the slower switch-in, a Mega setter after both.
+ */
+export function autoField(a: PokemonSet | undefined, b: PokemonSet | undefined) {
+  const both = [a, b].filter((s): s is PokemonSet => !!s);
+  const pick = <T,>(table: Record<string, T>, megaLater: boolean) => {
+    const setters = both.map(s => ({s, v: table[abilityOf(s)]})).filter(x => x.v !== undefined)
+      .map(x => ({...x, info: setterOf(x.s, '')}));
+    if (!setters.length) return null;
+    if (setters.length === 1 || setters[0].v === setters[1].v) return {value: setters[0].v, why: `from ${setters[0].info.name}`};
+    const [x, y] = setters;
+    const xLast = megaLater && x.info.mega !== y.info.mega ? x.info.mega : x.info.speed < y.info.speed;
+    const last = xLast ? x : y, first = xLast ? y : x;
+    const reason = megaLater && x.info.mega !== y.info.mega
+      ? `${last.info.name} Mega Evolves after the switch-ins`
+      : x.info.speed === y.info.speed ? `speed tie with ${first.info.name}` : `${last.info.name} (${last.info.speed}) is slower than ${first.info.name} (${first.info.speed})`;
+    return {value: last.v, why: `from ${last.info.name}: ${reason}`};
+  };
+  return {weather: pick(WEATHER_SETTERS, true), terrain: pick(TERRAIN_SETTERS, false)};
+}
