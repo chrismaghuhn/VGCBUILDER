@@ -178,7 +178,7 @@ const SPEED_WEATHER: Record<string, Weather> = {'Swift Swim': 'Rain', Chlorophyl
 /** Situational speed abilities: shown as a note, not applied. */
 const SPEED_NOTES: Record<string, string> = {Unburden: 'Unburden ×2 after item', 'Speed Boost': 'Speed Boost +1/turn', 'Quick Feet': 'Quick Feet ×1.5 when statused'};
 
-const abilityOf = (set: PokemonSet) => {
+export const abilityOf = (set: PokemonSet) => {
   const forme = SPECIES[battleForme(set)];
   return forme?.mega ? forme.abilities[0] : set.ability;
 };

@@ -9,6 +9,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {transform} from 'esbuild';
 
 const require = createRequire(import.meta.url);
+const {Dex: pkmnDex} = require('@pkmn/dex');
 const {Generations} = require('@smogon/calc');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -175,9 +176,10 @@ async function main() {
     if (m.id === 'nomove' || m.isMax || m.isZ) continue;
     moves[m.name] = {
       type: m.type,
-      cat: m.category,
+      cat: m.category || pkmnDex.moves.get(m.name)?.category,
       bp: m.basePower,
-      target: m.target,
+      // The calc's data only knows spread targets; Showdown's dex has all of them.
+      target: m.target || pkmnDex.moves.get(m.name)?.target,
       prio: m.priority || undefined,
       flags: Object.keys(m.flags || {}).length ? Object.keys(m.flags) : undefined,
       multihit: m.multihit,
@@ -276,6 +278,7 @@ async function main() {
 
   await buildPortraits(species);
   await extendShareDict(species, items, moves);
+  await buildSprites(species);
 
   const write = (name, data) => writeFile(join(OUT, name), JSON.stringify(data));
   await write('format.json', {...FORMAT, month, sources: SOURCES.filter(s => usage[s.key]).map(s => ({key: s.key, label: s.label})), builtAt: new Date().toISOString()});
@@ -284,6 +287,61 @@ async function main() {
   await write('moves.json', moves);
   await write('usage.json', usage);
   console.log('Wrote data to', OUT);
+}
+
+const SPRITES = join(ROOT, 'public', 'sprites');
+
+/**
+ * Animated top-down idle sprites (PMD SpriteCollab, CC BY-NC 4.0) for the matchup field.
+ * Copies Idle-Anim.png per forme and writes frame size + durations to sprites.json. Formes
+ * without their own art (most Megas) fall back to the base forme's sprite (`base: true`).
+ */
+async function buildSprites(species) {
+  if (!existsSync(join(SPRITECOLLAB, 'tracker.json'))) return;
+  const tracker = JSON.parse(await readFile(join(SPRITECOLLAB, 'tracker.json'), 'utf8'));
+  await mkdir(SPRITES, {recursive: true});
+  const idleOf = async dir => {
+    const xmlPath = join(dir, 'AnimData.xml');
+    if (!existsSync(xmlPath)) return null;
+    const xml = await readFile(xmlPath, 'utf8');
+    const anims = Object.fromEntries([...xml.matchAll(/<Anim>([\s\S]*?)<\/Anim>/g)].map(m => [m[1].match(/<Name>(\w+)<\/Name>/)?.[1], m[1]]));
+    let name = 'Idle';
+    for (let i = 0; i < 3 && anims[name]?.includes('<CopyOf>'); i++) name = anims[name].match(/<CopyOf>(\w+)<\/CopyOf>/)[1];
+    const body = anims[name];
+    const file = join(dir, `${name}-Anim.png`);
+    if (!body || !existsSync(file)) return null;
+    const num = tag => +body.match(new RegExp(`<${tag}>(\\d+)</${tag}>`))[1];
+    const durations = [...body.matchAll(/<Duration>(\d+)<\/Duration>/g)].map(m => +m[1]);
+    return {file, w: num('FrameWidth'), h: num('FrameHeight'), d: durations};
+  };
+  const out = {};
+  let own = 0, base = 0;
+  for (const [name, sp] of Object.entries(species)) {
+    const num = String(sp.num).padStart(4, '0');
+    const entry = tracker[num];
+    if (!entry) continue;
+    const root = join(SPRITECOLLAB, 'sprite', num);
+    const suffix = name.slice(sp.base.length + 1);
+    const female = /(^|-)F(-|$)/.test(suffix);
+    const formName = FORM_ALIASES[suffix] ?? suffix.replace(/-/g, '_');
+    const formKey = Object.entries(entry.subgroups).find(([, v]) => v.name && v.name === formName)?.[0];
+    const exact = [];
+    if (formKey) { if (female) exact.push(join(root, formKey, '0000', '0002')); exact.push(join(root, formKey)); }
+    if (female) exact.push(join(root, '0000', '0000', '0002'));
+    if (!suffix || female) exact.push(root);
+    let idle = null;
+    let isBase = false;
+    for (const d of exact) if ((idle = await idleOf(d))) break;
+    if (!idle) { idle = await idleOf(root); isBase = !!idle; }
+    if (!idle) continue;
+    await copyFile(idle.file, join(SPRITES, sp.id + '.png'));
+    out[sp.id] = {w: idle.w, h: idle.h, d: idle.d, ...(isBase ? {base: true} : {})};
+    if (isBase) base++; else own++;
+  }
+  const keep = new Set(Object.keys(out).map(id => id + '.png'));
+  for (const f of await readdir(SPRITES)) if (!keep.has(f)) await rm(join(SPRITES, f));
+  await writeFile(join(OUT, 'sprites.json'), JSON.stringify(out));
+  console.log(`Sprites: ${own} own, ${base} base-forme fallback, ${Object.keys(species).length - own - base} none`);
 }
 
 /**

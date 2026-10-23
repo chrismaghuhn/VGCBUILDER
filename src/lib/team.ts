@@ -1,3 +1,4 @@
+import type {ReplayMat} from './replay';
 import {
   ITEM_NAMES, MOVES, NATURES, SP_MAX, SP_TOTAL, SPECIES, STAT_LABEL, STATS,
   getItem, getSpecies, megaForme, type StatID, type StatTable, type UsageSource,
@@ -12,6 +13,8 @@ export interface PokemonSet {
   moves: string[];
   /** Stats whose SP the planning tabs must not change. */
   locked?: StatID[];
+  /** On the Playmat: holds its Mega Stone but hasn't Mega Evolved (yet). */
+  unevolved?: boolean;
 }
 
 export interface Team {
@@ -22,12 +25,65 @@ export interface Team {
   hidden?: string[];
   /** Leave Mega Evolutions out of teammate suggestions. */
   noMegas?: boolean;
+  /** The Playmat: opponent, board state and notes. */
+  playmat?: Playmat;
+}
+
+export type MatSide = 'mine' | 'theirs';
+
+export interface MatField {
+  weather: '' | 'Rain' | 'Sun' | 'Sand' | 'Snow';
+  terrain: '' | 'Electric' | 'Grassy' | 'Psychic' | 'Misty';
+  trickRoom: boolean;
+  tailwind: Record<MatSide, boolean>;
+  reflect: Record<MatSide, boolean>;
+  lightScreen: Record<MatSide, boolean>;
+}
+
+export interface MatNote {
+  id: string;
+  /** Position on the board in % of its size. */
+  x: number;
+  y: number;
+  text: string;
+  color: 'gold' | 'blue' | 'red' | 'green';
+}
+
+export interface Playmat {
+  name: string;
+  opp: PokemonSet[];
+  /** Who stands on the two battle spots per side (index into my team / opp, null = empty). */
+  mine: [number | null, number | null];
+  theirs: [number | null, number | null];
+  /** My four brought Pokémon. */
+  brought: number[];
+  /** HP in % and stat stages per Pokémon, keyed "m0".."m5" / "t0".."t5". */
+  hp: Record<string, number>;
+  boosts: Record<string, Partial<Record<'atk' | 'def' | 'spa' | 'spd' | 'spe', number>>>;
+  field: MatField;
+  notes: MatNote[];
+  /** Planned move per Pokémon on the field (keyed like hp) and whom it hits. */
+  actions?: Record<string, MatAction>;
+  /** Which Pokémon have Mega Evolved, keyed like hp (missing on older mats: every stone holder has). */
+  megas?: Record<string, boolean>;
+  /** Set when the mat plays back a Showdown replay. */
+  replay?: ReplayMat;
+}
+
+export interface MatAction {
+  move: string;
+  /** Fighter keys it hits; empty = not aimed yet (or a move without a target). */
+  targets: string[];
+  /** What really happened per target, from a replay ("−34%", "KO", "Protect" …). */
+  results?: Record<string, string>;
+  /** Label position along the arrow (0-1) per target, when the player moved it. */
+  labels?: Record<string, number>;
 }
 
 export const emptySps = (): StatTable => ({hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0});
 
 /** Forme the set actually battles as (its Mega forme if it holds the stone). */
-export const battleForme = (set: PokemonSet) => megaForme(set.species, set.item) ?? set.species;
+export const battleForme = (set: PokemonSet) => (set.unevolved ? undefined : megaForme(set.species, set.item)) ?? set.species;
 
 export function calcStat(base: number, stat: StatID, sp: number, nature: string): number {
   if (stat === 'hp') return base === 1 ? 1 : base + sp + 75;
