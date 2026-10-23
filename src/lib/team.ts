@@ -22,6 +22,17 @@ export interface Team {
   hidden?: string[];
   /** Leave Mega Evolutions out of teammate suggestions. */
   noMegas?: boolean;
+  /** Opponent and plan on the Matchup tab. */
+  matchup?: Matchup;
+}
+
+export interface Matchup {
+  name: string;
+  opp: PokemonSet[];
+  /** Their leads the user expects (indices into opp); null = weigh by lead stats. */
+  expected: [number, number] | null;
+  /** The user's own arrangement (indices into the team); null = follow the best plan. */
+  plan: {bring: number[]; lead: number[]} | null;
 }
 
 export const emptySps = (): StatTable => ({hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0});

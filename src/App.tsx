@@ -6,6 +6,7 @@ import {battleForme, validateTeam, type PokemonSet} from './lib/team';
 import {AnalysisView} from './components/AnalysisView';
 import {BulkView} from './components/BulkView';
 import {CalcView, makeSide, type Side} from './components/CalcView';
+import {MatchupView} from './components/MatchupView';
 import {MetaView} from './components/MetaView';
 import {OffenseView} from './components/OffenseView';
 import {PasteDialog} from './components/PasteDialog';
@@ -26,6 +27,7 @@ const PAGES = [
   {key: 'speed', label: 'Speed'},
   {key: 'bulk', label: 'Bulk'},
   {key: 'meta', label: 'Meta'},
+  {key: 'matchup', label: 'Matchup'},
   {key: 'calc', label: 'Calc'},
 ] as const;
 type Page = (typeof PAGES)[number]['key'];
@@ -111,7 +113,7 @@ export default function App() {
           <svg viewBox="0 0 32 32" className="h-8 w-8"><circle cx="16" cy="16" r="14" fill="none" stroke="#f5c542" strokeWidth="2.5"/><path d="M2 16h28" stroke="#f5c542" strokeWidth="2.5"/><circle cx="16" cy="16" r="5" fill="#0a0e16" stroke="#f5c542" strokeWidth="2.5"/></svg>
           <h1 className="font-display text-xl font-bold uppercase leading-none tracking-wider">Team<span className="text-gold">forge</span></h1>
         </div>
-        <nav className="flex gap-1 rounded-xl border border-line bg-bg/60 p-1">
+        <nav className="flex flex-wrap gap-1 rounded-xl border border-line bg-bg/60 p-1">
           {PAGES.map(p => (
             <button
               key={p.key}
@@ -221,6 +223,7 @@ export default function App() {
       {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
       {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
+      {page === 'matchup' && <MatchupView sets={sets} usage={usage} matchup={team.matchup} onChange={store.setMatchup} />}
       {page === 'calc' && <CalcView sets={sets} usage={usage} pair={calcPair} setPair={setCalcPair} />}
 
       <footer className="mt-12 border-t border-line pt-4 text-[11.5px] text-faint">
