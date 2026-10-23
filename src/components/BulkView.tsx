@@ -1,5 +1,5 @@
 import {useDeferredValue, useMemo, useState} from 'react';
-import {MOVES, STAT_LABEL, TYPE_COLOR, pct, type UsageSource} from '../lib/data';
+import {MOVES, SP_TOTAL, STAT_LABEL, STATS, TYPE_COLOR, pct, type StatID, type UsageSource} from '../lib/data';
 import {metaWeather, teamField} from '../lib/analysis';
 import {metaThreats, type FieldOpts} from '../lib/calc';
 import {bulkNeed, strongestMove, survives, type BulkContext, type BulkNeed, type KeptHit} from '../lib/bulk';
@@ -75,7 +75,7 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
   const live = sets[sel];
   const stale = me !== live;
 
-  const counts = {done: 0, sp: 0, nature: 0, conflict: 0, impossible: 0};
+  const counts = {done: 0, sp: 0, nature: 0, conflict: 0, locked: 0, impossible: 0};
   for (const r of rows) counts[r.need.kind]++;
 
   return (
@@ -97,14 +97,13 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
         </div>
       }
     >
+      <LockBar set={live} onChange={s => onUpdateSet(sel, s)} />
       <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px]">
-        <span className="text-faint">
-          {live.nature} · {(['hp', 'def', 'spd'] as const).map(s => `${live.sps[s]} ${STAT_LABEL[s]}`).join(' / ')} · pick another Pokémon in the team bar
-        </span>
         <span className="text-dim">survives <b className="text-good">{counts.done}</b> of {rows.length}</span>
         <span className="text-dim"><b className="text-gold">{counts.sp}</b> more with HP/Def/SpD SP</span>
         <span className="text-dim"><b className="text-gold">{counts.nature}</b> more with a bulk nature</span>
         {counts.conflict > 0 && <span className="text-dim"><b className="text-warn">{counts.conflict}</b> only by giving up others</span>}
+        {counts.locked > 0 && <span className="text-dim"><b className="text-info">{counts.locked}</b> only with locked SP</span>}
         <span className="text-dim"><b>{counts.impossible}</b> out of reach</span>
       </div>
 
@@ -143,6 +142,7 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
 function NeedChip({need, me, onApply}: {need: BulkNeed; me: PokemonSet; onApply: (s: PokemonSet) => void}) {
   if (need.kind === 'done') return <span className="text-[11.5px] text-good">✓ survives</span>;
   if (need.kind === 'impossible') return <span className="text-[11.5px] text-faint">✗ out of reach</span>;
+  if (need.kind === 'locked') return <span className="text-[11.5px] text-info" title="Reachable only by changing a locked stat">🔒 needs locked SP</span>;
   const nature = need.kind === 'sp' ? undefined : need.nature;
   const {set, taken} = applySps(me, {hp: need.hp, [need.stat]: need.def}, nature, need.protect);
   const label = `${nature ? `${nature} · ` : ''}HP ${need.hp} · ${STAT_LABEL[need.stat]} ${need.def}`;
@@ -163,5 +163,30 @@ function Toggle({on, onClick, title, children}: {on: boolean; onClick: () => voi
     <button className={`btn !py-1 text-xs ${on ? '!border-gold !bg-gold/15 text-gold' : ''}`} onClick={onClick} title={title}>
       {children}
     </button>
+  );
+}
+
+/** SP per stat with a lock toggle; locked stats are left alone by every suggestion. */
+function LockBar({set, onChange}: {set: PokemonSet; onChange: (s: PokemonSet) => void}) {
+  const locked = set.locked ?? [];
+  const toggle = (s: StatID) => onChange({...set, locked: locked.includes(s) ? locked.filter(x => x !== s) : [...locked, s]});
+  const lockedSp = locked.reduce((a, s) => a + set.sps[s], 0);
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[12.5px]">
+      <span className="mr-1 text-faint">{set.nature}</span>
+      {STATS.map(s => {
+        const on = locked.includes(s);
+        return (
+          <button key={s} onClick={() => toggle(s)} title={on ? 'Unlock' : 'Lock: suggestions keep this stat as it is'}
+            className={`num flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] transition ${on ? 'border-info bg-info/15 text-info' : 'border-line text-dim hover:text-ink'}`}>
+            <span>{STAT_LABEL[s]} {set.sps[s]}</span>
+            <span className="text-[10px]">{on ? '🔒' : '🔓'}</span>
+          </button>
+        );
+      })}
+      <span className="ml-2 text-dim">
+        Free for bulk: <b className="text-ink">{SP_TOTAL - lockedSp}</b> SP
+      </span>
+    </div>
   );
 }

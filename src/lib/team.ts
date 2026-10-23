@@ -10,6 +10,8 @@ export interface PokemonSet {
   nature: string;
   sps: StatTable;
   moves: string[];
+  /** Stats whose SP the planning tabs must not change. */
+  locked?: StatID[];
 }
 
 export interface Team {
