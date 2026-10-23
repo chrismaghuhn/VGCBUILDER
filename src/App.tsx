@@ -119,7 +119,7 @@ export default function App() {
       {/* Header */}
       <header className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-3">
-          <svg viewBox="0 0 32 32" className="h-8 w-8"><circle cx="16" cy="16" r="14" fill="none" stroke="#f5c542" strokeWidth="2.5"/><path d="M2 16h28" stroke="#f5c542" strokeWidth="2.5"/><circle cx="16" cy="16" r="5" fill="#0a0e16" stroke="#f5c542" strokeWidth="2.5"/></svg>
+          <svg viewBox="0 0 32 32" className="h-8 w-8"><circle cx="16" cy="16" r="14" fill="none" stroke="#f5f5f5" strokeWidth="2.5"/><path d="M2 16h28" stroke="#f5f5f5" strokeWidth="2.5"/><circle cx="16" cy="16" r="5" fill="#000" stroke="#f5f5f5" strokeWidth="2.5"/></svg>
           <h1 className="font-display text-xl font-bold uppercase leading-none tracking-wider">Team<span className="text-gold">forge</span></h1>
         </div>
         <nav className="flex flex-wrap gap-1 rounded-xl border border-line bg-bg/60 p-1">
@@ -127,7 +127,7 @@ export default function App() {
             <button
               key={p.key}
               onClick={() => setPage(p.key)}
-              className={`relative rounded-lg px-4 py-1.5 font-display text-[13px] font-semibold uppercase tracking-wider transition ${page === p.key ? 'bg-gold text-[#1a1406]' : 'text-dim hover:bg-panel-2 hover:text-ink'}`}
+              className={`relative rounded-lg px-4 py-1.5 font-display text-[13px] font-semibold uppercase tracking-wider transition ${page === p.key ? 'bg-gold text-black' : 'text-dim hover:bg-panel-2 hover:text-ink'}`}
             >
               {p.label}
               {p.key === 'analyse' && errorCount > 0 && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-bad" />}
@@ -230,9 +230,9 @@ export default function App() {
         />
       )}
       {page === 'analyse' && <AnalysisView sets={sets} usage={usage} issues={issues} weather={weather} />}
-      {page === 'offense' && <OffenseView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
-      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
-      {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
+      {page === 'offense' && <OffenseView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
+      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
+      {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
       {page === 'playmat' && (
         <PlaymatView sets={sets} usage={usage} mat={team.playmat} onChange={store.setPlaymat}

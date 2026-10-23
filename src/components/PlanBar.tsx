@@ -2,37 +2,10 @@ import {SP_TOTAL, STAT_LABEL, STATS, type StatID} from '../lib/data';
 import type {PokemonSet} from '../lib/team';
 import {PixelLock} from './icons';
 
-export type PlanStep = 'offense' | 'speed' | 'bulk';
-
-const STEPS: {key: PlanStep; label: string; hint: string}[] = [
-  {key: 'offense', label: 'Offense', hint: 'SP for the KOs you want'},
-  {key: 'speed', label: 'Speed', hint: 'SP to outspeed'},
-  {key: 'bulk', label: 'Bulk', hint: 'the rest to survive'},
-];
-
-/** Step indicator for the planning flow plus the shared lock bar. */
-export function PlanBar({step, set, onChange, onStep}: {
-  step: PlanStep;
-  set: PokemonSet;
-  onChange: (s: PokemonSet) => void;
-  onStep: (s: PlanStep) => void;
-}) {
+/** The shared lock bar of the planning tabs (Offense, Speed, Bulk). */
+export function PlanBar({set, onChange}: {set: PokemonSet; onChange: (s: PokemonSet) => void}) {
   return (
-    <div className="mb-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-        {STEPS.map((s, i) => (
-          <span key={s.key} className="flex items-center gap-1.5">
-            {i > 0 && <span className="text-faint">→</span>}
-            <button
-              onClick={() => onStep(s.key)}
-              className={`rounded-md border px-2 py-0.5 transition ${s.key === step ? 'border-gold bg-gold/15 text-gold' : 'border-line text-dim hover:text-ink'}`}
-            >
-              <b>{i + 1}</b> {s.label} <span className="text-faint">· {s.hint}</span>
-            </button>
-          </span>
-        ))}
-        <span className="ml-1 text-faint">Lock what you've settled, then move on.</span>
-      </div>
+    <div className="mb-3">
       <LockBar set={set} onChange={onChange} />
     </div>
   );

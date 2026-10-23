@@ -5,17 +5,16 @@ import {applySpeed, speedNeed, type SpeedNeed} from '../lib/speed';
 import {battleForme, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {PixelLock} from './icons';
-import {PlanBar, type PlanStep} from './PlanBar';
+import {PlanBar} from './PlanBar';
 import {Portrait, Section, WeatherControls, type WeatherState} from './ui';
 
-export function SpeedView({sets, usage, weather, selected, onUpdateSet, onStep}: {
+export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
   sets: PokemonSet[];
   usage: UsageSource;
   weather: WeatherState;
   /** Index into sets, picked via the team bar. */
   selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
-  onStep: (s: PlanStep) => void;
 }) {
   const [trickRoom, setTrickRoom] = useState(false);
   const [tailwind, setTailwind] = useState(false);
@@ -90,7 +89,7 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet, onStep}:
           </div>
         }
       >
-        {me && <PlanBar step="speed" set={me} onChange={s => onUpdateSet(sel, s)} onStep={onStep} />}
+        {me && <PlanBar set={me} onChange={s => onUpdateSet(sel, s)} />}
         <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12.5px]">
           <StageControl label="You" stage={myStage} setStage={setMyStage} para={myPara} setPara={setMyPara} />
           <StageControl label="Opponents" stage={enemyStage} setStage={setEnemyStage} para={enemyPara} setPara={setEnemyPara} />
@@ -208,7 +207,7 @@ function StageControl({label, stage, setStage, para, setPara}: {
       <span className="flex overflow-hidden rounded-md border border-line">
         {STAGES.map(n => (
           <button key={n} onClick={() => setStage(n)}
-            className={`num px-1.5 py-0.5 text-[11.5px] ${stage === n ? 'bg-gold text-[#1a1406]' : 'text-dim hover:bg-panel-2'}`}>
+            className={`num px-1.5 py-0.5 text-[11.5px] ${stage === n ? 'bg-gold text-black' : 'text-dim hover:bg-panel-2'}`}>
             {n > 0 ? `+${n}` : n}
           </button>
         ))}

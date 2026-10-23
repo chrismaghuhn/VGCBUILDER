@@ -254,7 +254,7 @@ function PickMon({name, role, onClick, size = 44}: {name: string; role: Role; on
       className={`relative rounded-lg p-0.5 transition ${role === 'lead' ? 'ring-2 ring-gold' : role === 'back' ? 'ring-2 ring-info/70' : 'opacity-45 hover:opacity-80'}`}>
       <Portrait name={name} size={size} />
       {role && (
-        <span className={`absolute -bottom-1 -right-1 rounded px-1 font-display text-[9px] font-bold leading-[13px] ${role === 'lead' ? 'bg-gold text-[#1a1406]' : 'bg-info text-[#06101c]'}`}>
+        <span className={`absolute -bottom-1 -right-1 rounded px-1 font-display text-[9px] font-bold leading-[13px] ${role === 'lead' ? 'bg-gold text-black' : 'bg-info text-[#06101c]'}`}>
           {role === 'lead' ? 'L' : 'B'}
         </span>
       )}

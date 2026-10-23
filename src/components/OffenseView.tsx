@@ -8,7 +8,7 @@ import type {PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {PixelLock} from './icons';
 import {koLabel} from './MetaView';
-import {PlanBar, type PlanStep} from './PlanBar';
+import {PlanBar} from './PlanBar';
 import {Portrait, Section, WeatherChip, WeatherControls, type WeatherState} from './ui';
 
 interface Row {
@@ -21,13 +21,12 @@ interface Row {
   weather?: string;
 }
 
-export function OffenseView({sets, usage, weather, selected, onUpdateSet, onStep}: {
+export function OffenseView({sets, usage, weather, selected, onUpdateSet}: {
   sets: PokemonSet[];
   usage: UsageSource;
   weather: WeatherState;
   selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
-  onStep: (s: PlanStep) => void;
 }) {
   const [helpingHand, setHelpingHand] = useState(false);
   const [atkDrop, setAtkDrop] = useState(false);
@@ -101,7 +100,7 @@ export function OffenseView({sets, usage, weather, selected, onUpdateSet, onStep
         </div>
       }
     >
-      <PlanBar step="offense" set={live} onChange={s => onUpdateSet(sel, s)} onStep={onStep} />
+      <PlanBar set={live} onChange={s => onUpdateSet(sel, s)} />
       <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px]">
         <span className="text-dim">guaranteed {goal} <b className="text-good">{counts.done}</b> of {rows.length}</span>
         <span className="text-dim"><b className="text-gold">{counts.sp}</b> more with Atk/SpA SP</span>

@@ -93,7 +93,7 @@ export function Sprite({name, facing = 'down', scale: maxScale = 2, fit, offset 
         }}
       />
       {isMega && info.base && (
-        <span className="absolute -right-1 top-1 rounded bg-gold px-0.5 font-display text-[8px] font-bold leading-[11px] text-[#1a1406]">M</span>
+        <span className="absolute -right-1 top-1 rounded bg-gold px-0.5 font-display text-[8px] font-bold leading-[11px] text-black">M</span>
       )}
     </div>
   );

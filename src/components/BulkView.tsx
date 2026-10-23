@@ -7,7 +7,7 @@ import {applySps} from '../lib/speed';
 import type {PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {PixelLock} from './icons';
-import {PlanBar, type PlanStep} from './PlanBar';
+import {PlanBar} from './PlanBar';
 import {koLabel} from './MetaView';
 import {Portrait, Section, WeatherChip, WeatherControls, dmgColor, type WeatherState} from './ui';
 
@@ -22,13 +22,12 @@ interface Row {
   weather?: string;
 }
 
-export function BulkView({sets, usage, weather, selected, onUpdateSet, onStep}: {
+export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
   sets: PokemonSet[];
   usage: UsageSource;
   weather: WeatherState;
   selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
-  onStep: (s: PlanStep) => void;
 }) {
   // Stat drops on the attacker: -1 Atk (Intimidate, Parting Shot …) and -1 SpA (Snarl, Eerie Impulse …).
   const [atkDrop, setAtkDrop] = useState(false);
@@ -100,7 +99,7 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet, onStep}: 
         </div>
       }
     >
-      <PlanBar step="bulk" set={live} onChange={s => onUpdateSet(sel, s)} onStep={onStep} />
+      <PlanBar set={live} onChange={s => onUpdateSet(sel, s)} />
       <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px]">
         <span className="text-dim">survives <b className="text-good">{counts.done}</b> of {rows.length}</span>
         <span className="text-dim"><b className="text-gold">{counts.sp}</b> more with HP/Def/SpD SP</span>
