@@ -1,11 +1,12 @@
 import {useDeferredValue, useMemo, useState} from 'react';
-import {MOVES, SP_TOTAL, STAT_LABEL, STATS, TYPE_COLOR, pct, type StatID, type UsageSource} from '../lib/data';
+import {MOVES, STAT_LABEL, TYPE_COLOR, pct, type UsageSource} from '../lib/data';
 import {metaWeather, teamField} from '../lib/analysis';
 import {metaThreats, type FieldOpts} from '../lib/calc';
 import {bulkNeed, strongestMove, survives, type BulkContext, type BulkNeed, type KeptHit} from '../lib/bulk';
 import {applySps} from '../lib/speed';
 import type {PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
+import {PlanBar, type PlanStep} from './PlanBar';
 import {koLabel} from './MetaView';
 import {Portrait, Section, WeatherChip, WeatherControls, dmgColor, type WeatherState} from './ui';
 
@@ -20,12 +21,13 @@ interface Row {
   weather?: string;
 }
 
-export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
+export function BulkView({sets, usage, weather, selected, onUpdateSet, onStep}: {
   sets: PokemonSet[];
   usage: UsageSource;
   weather: WeatherState;
   selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
+  onStep: (s: PlanStep) => void;
 }) {
   // Stat drops on the attacker: -1 Atk (Intimidate, Parting Shot …) and -1 SpA (Snarl, Eerie Impulse …).
   const [atkDrop, setAtkDrop] = useState(false);
@@ -97,7 +99,7 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
         </div>
       }
     >
-      <LockBar set={live} onChange={s => onUpdateSet(sel, s)} />
+      <PlanBar step="bulk" set={live} onChange={s => onUpdateSet(sel, s)} onStep={onStep} />
       <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px]">
         <span className="text-dim">survives <b className="text-good">{counts.done}</b> of {rows.length}</span>
         <span className="text-dim"><b className="text-gold">{counts.sp}</b> more with HP/Def/SpD SP</span>
@@ -166,27 +168,3 @@ function Toggle({on, onClick, title, children}: {on: boolean; onClick: () => voi
   );
 }
 
-/** SP per stat with a lock toggle; locked stats are left alone by every suggestion. */
-function LockBar({set, onChange}: {set: PokemonSet; onChange: (s: PokemonSet) => void}) {
-  const locked = set.locked ?? [];
-  const toggle = (s: StatID) => onChange({...set, locked: locked.includes(s) ? locked.filter(x => x !== s) : [...locked, s]});
-  const lockedSp = locked.reduce((a, s) => a + set.sps[s], 0);
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[12.5px]">
-      <span className="mr-1 text-faint">{set.nature}</span>
-      {STATS.map(s => {
-        const on = locked.includes(s);
-        return (
-          <button key={s} onClick={() => toggle(s)} title={on ? 'Unlock' : 'Lock: suggestions keep this stat as it is'}
-            className={`num flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] transition ${on ? 'border-info bg-info/15 text-info' : 'border-line text-dim hover:text-ink'}`}>
-            <span>{STAT_LABEL[s]} {set.sps[s]}</span>
-            <span className="text-[10px]">{on ? '🔒' : '🔓'}</span>
-          </button>
-        );
-      })}
-      <span className="ml-2 text-dim">
-        Free for bulk: <b className="text-ink">{SP_TOTAL - lockedSp}</b> SP
-      </span>
-    </div>
-  );
-}

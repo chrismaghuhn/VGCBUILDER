@@ -1,7 +1,7 @@
 import {MOVES, NATURES, SP_MAX, SPECIES, type StatID} from './data';
 import {runCalc, type Boosts, type CalcOut, type FieldOpts} from './calc';
 import {battleForme, type PokemonSet} from './team';
-import {applySps} from './speed';
+import {applySps, natureKeepsLocked} from './speed';
 
 interface Spread {
   hp: number;
@@ -134,14 +134,6 @@ export function bulkNeed(attacker: PokemonSet, set: PokemonSet, move: string, ct
   return {kind: 'impossible'};
 }
 
-/** A nature change must not change any locked stat (e.g. Timid → Calm with Speed locked). */
-function natureKeepsLocked(set: PokemonSet, nature: string): boolean {
-  const mult = (n: string, s: StatID) => {
-    const [plus, minus] = NATURES[n] ?? [null, null];
-    return plus === minus ? 1 : plus === s ? 1.1 : minus === s ? 0.9 : 1;
-  };
-  return (set.locked ?? []).every(s => mult(set.nature, s) === mult(nature, s));
-}
 
 /** The threat's most damaging attack against the set (by max roll). */
 export function strongestMove(attacker: PokemonSet, set: PokemonSet, moves: string[], ctx: BulkContext): {move: string; out: CalcOut} | null {
