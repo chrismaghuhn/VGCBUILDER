@@ -176,7 +176,7 @@ async function main() {
     if (m.id === 'nomove' || m.isMax || m.isZ) continue;
     moves[m.name] = {
       type: m.type,
-      cat: m.category,
+      cat: m.category || pkmnDex.moves.get(m.name)?.category,
       bp: m.basePower,
       // The calc's data only knows spread targets; Showdown's dex has all of them.
       target: m.target || pkmnDex.moves.get(m.name)?.target,

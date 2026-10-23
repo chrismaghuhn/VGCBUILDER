@@ -65,6 +65,7 @@ export function priorityOf(mat: Playmat, f: Fighter, move?: string): number {
   if (ability === 'Prankster' && m.cat === 'Status') prio += 1;
   if (ability === 'Gale Wings' && m.type === 'Flying' && (mat.hp[f.key] ?? 100) >= 100) prio += 1;
   if (ability === 'Triage' && m.flags?.includes('heal')) prio += 3;
+  if (move === 'Grassy Glide' && mat.field.terrain === 'Grassy') prio += 1;
   return prio;
 }
 
