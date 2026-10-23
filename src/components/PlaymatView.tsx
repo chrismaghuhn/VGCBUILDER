@@ -854,7 +854,8 @@ function MoveChips({set, action, hot, onPick, side}: {set: PokemonSet; action?: 
     <div className="relative flex flex-col items-center">
       {picked && <div className="group-hover/spot:invisible">{picked}</div>}
     <div data-obstacle={picked ? undefined : ''} onPointerDown={e => e.stopPropagation()}
-      className={`mt-1.5 grid grid-cols-2 gap-1 ${picked ? 'invisible absolute top-0 z-20 rounded-lg bg-black/80 p-1 group-hover/spot:visible' : ''}`}>
+      className={`mt-1.5 grid w-max grid-cols-[104px_104px] gap-1 ${
+        picked ? 'invisible absolute left-1/2 top-0 z-30 -translate-x-1/2 rounded-lg border border-white/10 bg-[#0b1413]/95 p-1 shadow-xl group-hover/spot:visible' : ''}`}>
       {set.moves.slice(0, 4).map((m, n) => (
         <button key={m + n} onClick={e => { e.stopPropagation(); onPick(n); }}
           className={`flex w-[104px] items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-left text-[10.5px] transition ${
