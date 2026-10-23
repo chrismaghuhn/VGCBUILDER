@@ -6,13 +6,14 @@ import {battleForme, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {Portrait, Section, WeatherControls, type WeatherState} from './ui';
 
-export function SpeedView({sets, usage, weather, onUpdateSet}: {
+export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
   sets: PokemonSet[];
   usage: UsageSource;
   weather: WeatherState;
+  /** Index into sets, picked via the team bar. */
+  selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
 }) {
-  const [selected, setSelected] = useState(0);
   const [trickRoom, setTrickRoom] = useState(false);
   const [tailwind, setTailwind] = useState(false);
   const [enemyTailwind, setEnemyTailwind] = useState(false);
@@ -52,28 +53,8 @@ export function SpeedView({sets, usage, weather, onUpdateSet}: {
 
   return (
     <div className="space-y-4">
-      {/* Pick the Pokémon to plan for */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-        {sets.map((s, i) => {
-          const spe = effectiveSpeed(s, field, true).speed;
-          return (
-            <button
-              key={i}
-              onClick={() => setSelected(i)}
-              className={`flex items-center gap-2.5 rounded-xl border p-2 text-left transition ${i === sel ? 'border-gold bg-gold/10' : 'border-line bg-panel/70 hover:border-line-2'}`}
-            >
-              <Portrait name={battleForme(s)} size={40} />
-              <div className="min-w-0">
-                <div className="truncate font-display text-[14px] font-semibold">{s.species}</div>
-                <div className="num text-[12px]"><span className={i === sel ? 'text-gold' : ''}>{spe}</span> <span className="text-faint">· {s.nature} {s.sps.spe} SP</span></div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
       <Section
-        title={`Speed · ${me?.species ?? ''}`}
+        title={me ? `Speed · ${me.species} ${effectiveSpeed(me, field, true).speed}` : 'Speed'}
         right={
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <WeatherControls state={weather} auto={auto.weather} />
@@ -91,6 +72,7 @@ export function SpeedView({sets, usage, weather, onUpdateSet}: {
       >
         {me && (
           <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px]">
+            <span className="text-faint">{me.nature} · {me.sps.spe} Spe SP · pick another Pokémon in the team bar</span>
             <span className="text-dim">{me.species} {verb} <b className="text-good">{counts.done}</b> of {needs.size}</span>
             <span className="text-dim"><b className="text-gold">{counts.sp}</b> more with Spe SP</span>
             <span className="text-dim"><b className="text-gold">{counts.nature}</b> more with a speed nature</span>
