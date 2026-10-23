@@ -21,10 +21,12 @@ import {SearchView} from './components/SearchView';
 import {SetEditor} from './components/SetEditor';
 import {SpeedView} from './components/SpeedView';
 import {TeamBar} from './components/TeamBar';
+import {TeamHeaderMeta, TeamNotes} from './components/TeamMeta';
+import {TeamsView} from './components/TeamsView';
 import type {WeatherPref, WeatherState} from './components/ui';
 
 const PAGES = [
-  {key: 'bauen', label: 'Build'},
+  {key: 'teams', label: 'Teams'},
   {key: 'suche', label: 'Search'},
   {key: 'analyse', label: 'Analysis'},
   {key: 'offense', label: 'Offense'},
@@ -42,7 +44,8 @@ const EMPTY: string[] = [];
 
 const pageFromHash = (): Page => {
   const h = location.hash.slice(1);
-  return (PAGES.find(p => p.key === h)?.key ?? 'bauen') as Page;
+  // #bauen was the old name of the Teams tab.
+  return (PAGES.find(p => p.key === h)?.key ?? 'teams') as Page;
 };
 
 export default function App() {
@@ -79,6 +82,11 @@ export default function App() {
   );
   const vsPage = page === 'analyse' || page === 'speed' || page === 'meta' || page === 'calc';
 
+  // On the Teams tab: the overview, or the editor of the open team.
+  const [teamOpen, setTeamOpen] = useState(false);
+  const editing = page === 'teams' && teamOpen;
+  const openEditor = (slot = 0) => { setSelected(slot); setTeamOpen(true); setPage('teams'); };
+  const allTags = useMemo(() => [...new Set(store.teams.flatMap(t => t.tags ?? []))].sort(), [store.teams]);
   const setPage = (p: Page) => {
     if (location.hash.slice(1) !== p) location.hash = p;
     setPageState(p);
@@ -89,6 +97,7 @@ export default function App() {
     const onHash = () => {
       const h = location.hash.slice(1);
       if (PAGES.some(p => p.key === h)) setPageState(h as Page);
+      if (h === 'bauen') setPageState('teams');
       const payload = sharePayload(h);
       if (payload) decodeShare(payload).then(setShared, e => setShared({error: (e as Error).message}));
       const board = matPayload(location.hash);
@@ -139,7 +148,7 @@ export default function App() {
           {PAGES.map(p => (
             <button
               key={p.key}
-              onClick={() => setPage(p.key)}
+              onClick={() => { if (p.key === 'teams') setTeamOpen(false); setPage(p.key); }}
               className={`relative rounded-lg px-4 py-1.5 font-display text-[13px] font-semibold uppercase tracking-wider transition ${page === p.key ? 'bg-gold text-black' : 'text-dim hover:bg-panel-2 hover:text-ink'}`}
             >
               {p.label}
@@ -167,10 +176,11 @@ export default function App() {
       )}
 
       {/* Team row: shared by all pages except the Playmat (team is on the board) and Matches (a log, not editing) */}
-      {page !== 'playmat' && page !== 'matches' && (
+      {page !== 'playmat' && page !== 'matches' && !(page === 'teams' && !teamOpen) && (
         <div className="panel mb-5 p-3">
           <div className="mb-2.5 flex flex-wrap items-center gap-2">
-            {store.teams.length > 1 && (
+            {editing && <button className="text-[12.5px] text-dim hover:text-ink" onClick={() => setTeamOpen(false)}>← All teams</button>}
+            {!editing && store.teams.length > 1 && (
               <select
                 className="field !w-auto !py-1 text-xs text-dim"
                 value=""
@@ -187,6 +197,7 @@ export default function App() {
               onChange={e => store.rename(e.target.value)}
               aria-label="Team name"
             />
+            {editing && <TeamHeaderMeta team={team} folders={store.folders} onMeta={patch => store.setTeamMeta(team.id, patch)} />}
             <CheckBar sets={sets} errors={errorCount} onClick={() => setPage('analyse')} />
             {vsPage && (
               <VsPicker boards={oppBoards} openId={team.playmat?.id} opp={opp}
@@ -194,8 +205,8 @@ export default function App() {
             )}
             <div className="flex gap-1.5">
               <button className="btn !px-2.5 !py-1 text-xs disabled:opacity-35" onClick={store.undo} disabled={!store.canUndo} title="Undo (Ctrl+Z)">↶</button>
-              <button className="btn !py-1 text-xs" onClick={() => { store.create(); setSelected(0); setPage('bauen'); }}>+ New</button>
-              <button className="btn !py-1 text-xs" onClick={store.duplicate} title="Duplicate">⧉</button>
+              <button className="btn !py-1 text-xs" onClick={() => { store.create([], undefined, {folder: team.folder}); openEditor(); }}>+ New</button>
+              <button className="btn !py-1 text-xs" onClick={() => store.duplicate()} title="Duplicate">⧉</button>
               <button className="btn !py-1 text-xs" onClick={() => setDialog('import')}>Import</button>
               <button className="btn btn-gold !py-1 text-xs" onClick={() => setDialog('export')} disabled={!sets.length}>Export</button>
               <button className="btn !px-2.5 !py-1 text-xs hover:!border-bad/60 hover:!text-bad" onClick={() => { if (confirm(`Delete "${team.name}"?`)) store.remove(); }} title="Delete team">🗑</button>
@@ -203,20 +214,33 @@ export default function App() {
           </div>
           <TeamBar
             sets={sets}
-            selected={page === 'bauen' ? sel : planning ? Math.min(planSel, sets.length - 1) : -1}
+            selected={editing ? sel : planning ? Math.min(planSel, sets.length - 1) : -1}
             issues={issues}
             onSelect={i => {
               // On the planning tabs a click picks the Pokémon to plan for; elsewhere it opens the editor.
               if (planning && i < sets.length) setPlanSel(i);
-              else { setSelected(i); setPage('bauen'); }
+              else openEditor(i);
             }}
             onRemove={removeSlot}
             onMove={(from, to) => { setSets(p => { const n = [...p]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; }); setSelected(to); }}
           />
+          {editing && <TeamNotes team={team} allTags={allTags} onMeta={(patch, key) => store.setTeamMeta(team.id, patch, key)} />}
         </div>
       )}
 
-      {page === 'bauen' && (
+      {page === 'teams' && !teamOpen && (
+        <TeamsView teams={store.teams} folders={store.folders} activeId={team.id} usage={usage}
+          onOpen={id => { store.select(id); openEditor(); }}
+          onNew={folder => { store.create([], undefined, {folder}); openEditor(); }}
+          onImport={() => setDialog('import')}
+          onDuplicate={id => store.duplicate(id)}
+          onExport={id => { store.select(id); setDialog('export'); }}
+          onDelete={id => store.remove(id)}
+          onMeta={(id, patch) => store.setTeamMeta(id, patch)}
+          onAddFolder={store.addFolder} onRenameFolder={store.renameFolder} onDeleteFolder={store.deleteFolder}
+          onUseTournament={(imported, name, extra) => { store.create(imported, name, extra); openEditor(); }} />
+      )}
+      {editing && (
         <div className="mx-auto max-w-[980px]">
           {sets[sel] ? (
             <SetEditor
@@ -290,7 +314,7 @@ export default function App() {
       {shared && (
         <SharedDialog
           shared={shared}
-          onClose={() => { setShared(null); history.replaceState(null, '', `${location.pathname}#bauen`); setPageState('bauen'); }}
+          onClose={() => { setShared(null); history.replaceState(null, '', `${location.pathname}#teams`); setPageState('teams'); }}
           onImport={(name, imported) => { store.create(imported, name); setSelected(0); }}
         />
       )}

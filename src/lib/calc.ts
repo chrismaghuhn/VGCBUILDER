@@ -326,3 +326,10 @@ export function suggestTeammates(
   }
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }
+
+/** Sets without spreads (open team sheets, many pastes) get the most common meta spread, marked as estimated. */
+export const fillSpreads = (team: PokemonSet[], usage: UsageSource): PokemonSet[] => team.map(s => {
+  if (Object.values(s.sps).some(v => v > 0)) return s;
+  const meta = metaSet(s.species, usage);
+  return {...s, nature: meta.nature, sps: meta.sps, item: s.item || meta.item, ability: s.ability || meta.ability, moves: s.moves.length ? s.moves : meta.moves, estimated: true};
+});

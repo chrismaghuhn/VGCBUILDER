@@ -32,6 +32,14 @@ npm run data   # legality/learnsets (Showdown champions mod) + Smogon usage + Sp
 
 New regulation: adjust `FORMAT`/`SOURCES` in `scripts/build-data.mjs` and run `npm run data`.
 
+Tournament teams (Teams tab → Tournament teams): export the VGCPastes repository sheet as CSV and run
+
+```bash
+npm run tournament -- "VGCPastes Repository - Champions M-C.csv"
+```
+
+It writes `src/data/generated/tournament-teams.json`, which the site loads only when that section opens.
+
 ## Deploying
 
 Live at https://vgcbuilder.duckdns.org (static files served by Caddy on the VPS, HTTPS via Let's Encrypt).
@@ -65,6 +73,7 @@ offer on secure origins.
 - Usage data: [Smogon Stats](https://www.smogon.com/stats/)
 - Legality & learnsets: [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (`data/mods/champions`)
 - Damage calc: [@smogon/calc](https://github.com/smogon/damage-calc)
+- Tournament teams: the [VGCPastes](https://x.com/VGCPastes) repository of public team sheets; each team links to its paste and original post.
 - Portraits in `public/portraits/`: [PMD SpriteCollab](https://github.com/PMDCollab/SpriteCollab), **CC BY-NC 4.0** (non-commercial). Credits in `public/portraits/CREDITS.txt`.
 
 Pokémon and all related names are trademarks of Nintendo, Game Freak and The Pokémon Company. This is a fan project not affiliated with them.
