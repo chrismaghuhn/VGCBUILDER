@@ -2,7 +2,7 @@ import {useDeferredValue, useMemo, useState} from 'react';
 import {MOVES, STAT_LABEL, TYPE_COLOR, pct, type UsageSource} from '../lib/data';
 import {metaWeather, teamField} from '../lib/analysis';
 import {metaThreats, type FieldOpts} from '../lib/calc';
-import {bulkNeed, strongestMove, type BulkContext, type BulkNeed} from '../lib/bulk';
+import {bulkNeed, strongestMove, survives, type BulkContext, type BulkNeed, type KeptHit} from '../lib/bulk';
 import {applySps} from '../lib/speed';
 import type {PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
@@ -44,7 +44,8 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
 
   const rows = useMemo<Row[]>(() => {
     if (!me) return [];
-    const out: Row[] = [];
+    // Pass 1: every (threat, move) with its damage; pass 2: needs, keeping the hits already survived.
+    const hits: (Omit<Row, 'need'> & {ctx: BulkContext; ok: boolean})[] = [];
     for (const t of metaThreats(usage, limit)) {
       const own = weather.enemy ? metaWeather(t.name, usage) : null;
       const w = own?.weather ?? baseWeather;
@@ -55,23 +56,26 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
       for (const move of picked) {
         const res = strongestMove(t.set, me, [move], ctx);
         if (!res) continue;
-        out.push({
-          threat: t.name, attacker: t.set, move,
+        hits.push({
+          threat: t.name, attacker: t.set, move, ctx,
           minPct: res.out.minPct, maxPct: res.out.maxPct,
           ko: koLabel({move, minPct: res.out.minPct, maxPct: res.out.maxPct, koText: res.out.koText, koN: res.out.koN, koChance: res.out.koChance}),
-          need: bulkNeed(t.set, me, move, ctx),
+          ok: survives(t.set, me, move, ctx),
           weather: own && own.weather !== baseWeather ? own.weather : undefined,
         });
       }
     }
-    return out.sort((a, b) => b.maxPct - a.maxPct);
+    const keep: KeptHit[] = hits.filter(h => h.ok).map(h => ({name: h.threat, attacker: h.attacker, move: h.move, ctx: h.ctx}));
+    return hits
+      .map(({ctx, ok, ...h}) => ({...h, need: ok ? {kind: 'done' as const} : bulkNeed(h.attacker, me, h.move, ctx, keep)}))
+      .sort((a, b) => b.maxPct - a.maxPct);
   }, [me, usage, limit, baseWeather, auto.electricTerrain, weather.enemy, helpingHand, reflect, lightScreen, atkDrop, spaDrop, twoHits, allMoves]);
 
   if (!sets.length) return <Empty />;
   const live = sets[sel];
   const stale = me !== live;
 
-  const counts = {done: 0, sp: 0, nature: 0, impossible: 0};
+  const counts = {done: 0, sp: 0, nature: 0, conflict: 0, impossible: 0};
   for (const r of rows) counts[r.need.kind]++;
 
   return (
@@ -100,10 +104,12 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
         <span className="text-dim">survives <b className="text-good">{counts.done}</b> of {rows.length}</span>
         <span className="text-dim"><b className="text-gold">{counts.sp}</b> more with HP/Def/SpD SP</span>
         <span className="text-dim"><b className="text-gold">{counts.nature}</b> more with a bulk nature</span>
+        {counts.conflict > 0 && <span className="text-dim"><b className="text-warn">{counts.conflict}</b> only by giving up others</span>}
         <span className="text-dim"><b>{counts.impossible}</b> out of reach</span>
       </div>
 
-      <div className={`max-h-[640px] overflow-y-auto pr-1 ${stale ? 'opacity-60' : ''}`}>
+      {/* While recomputing, suggestions belong to the previous spread: block clicks until fresh. */}
+      <div className={`max-h-[640px] overflow-y-auto pr-1 ${stale ? 'pointer-events-none opacity-60' : ''}`} aria-busy={stale}>
         {rows.map((r, i) => {
           const mv = MOVES[r.move];
           return (
@@ -137,14 +143,17 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
 function NeedChip({need, me, onApply}: {need: BulkNeed; me: PokemonSet; onApply: (s: PokemonSet) => void}) {
   if (need.kind === 'done') return <span className="text-[11.5px] text-good">✓ survives</span>;
   if (need.kind === 'impossible') return <span className="text-[11.5px] text-faint">✗ out of reach</span>;
-  const nature = need.kind === 'nature' ? need.nature : undefined;
-  const {set, taken} = applySps(me, {hp: need.hp, [need.stat]: need.def}, nature);
+  const nature = need.kind === 'sp' ? undefined : need.nature;
+  const {set, taken} = applySps(me, {hp: need.hp, [need.stat]: need.def}, nature, need.protect);
   const label = `${nature ? `${nature} · ` : ''}HP ${need.hp} · ${STAT_LABEL[need.stat]} ${need.def}`;
-  const detail = `Set ${label} SP${taken.length ? ` (takes ${taken.map(([s, n]) => `${n} from ${STAT_LABEL[s]}`).join(', ')})` : ''}`;
+  const conflict = need.kind === 'conflict';
+  const detail = `Set ${label} SP${taken.length ? ` (takes ${taken.map(([s, n]) => `${n} from ${STAT_LABEL[s]}`).join(', ')})` : ''}`
+    + (conflict ? `\nNo longer survives: ${need.breaks.join(', ')}` : '');
   return (
     <button onClick={() => onApply(set)} title={detail}
-      className="rounded-md border border-gold/40 bg-gold/10 px-1.5 py-0.5 text-[11.5px] text-gold hover:bg-gold/20">
-      {label}
+      className={`rounded-md border px-1.5 py-0.5 text-[11.5px] ${conflict ? 'border-warn/40 bg-warn/10 text-warn hover:bg-warn/20' : 'border-gold/40 bg-gold/10 text-gold hover:bg-gold/20'}`}>
+      {conflict && '⚠ '}{label}
+      {conflict && <span className="ml-1 text-[10px] opacity-80">breaks {need.breaks.length}</span>}
     </button>
   );
 }

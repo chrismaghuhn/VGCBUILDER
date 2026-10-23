@@ -46,7 +46,8 @@ export function useStore() {
   const commit = useCallback((fn: (s: Saved) => Saved, key = '') => {
     const prev = current.current;
     const next = fn(prev);
-    if (next === prev) return;
+    // No-op changes (e.g. the same suggestion applied twice by a double click) leave no undo step.
+    if (next === prev || JSON.stringify(next) === JSON.stringify(prev)) return;
     const now = Date.now();
     const coalesce = key !== '' && lastPush.current.key === key && now - lastPush.current.at < COALESCE_MS;
     lastPush.current = {at: now, key};

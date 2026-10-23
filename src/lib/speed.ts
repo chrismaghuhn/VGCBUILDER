@@ -56,19 +56,26 @@ export function applySpeed(set: PokemonSet, sp: number, nature = set.nature) {
 /**
  * Set some stats' SP (and optionally the nature). When the total goes over 66, the extra SP come
  * out of the other stats one point at a time from whichever is highest, so investments even out
- * instead of one stat being emptied. The changed stats and the nature-boosted stat are protected
- * unless nothing else is left.
+ * instead of one stat being emptied. Order of sources: unprotected stats first, then `protect`ed
+ * ones, the nature-boosted stat last. The changed stats are never touched.
  */
-export function applySps(set: PokemonSet, changes: Partial<StatTable>, nature = set.nature): {set: PokemonSet; taken: [StatID, number][]} {
+export function applySps(
+  set: PokemonSet, changes: Partial<StatTable>, nature = set.nature, protect: StatID[] = [],
+): {set: PokemonSet; taken: [StatID, number][]} {
   const sps = {...set.sps, ...changes};
   let over = STATS.reduce((a, s) => a + sps[s], 0) - SP_TOTAL;
   const taken = new Map<StatID, number>();
   const [plus] = NATURES[nature] ?? [null, null];
   const others = STATS.filter(s => !(s in changes));
+  const tiers = [
+    others.filter(s => s !== plus && !protect.includes(s)),
+    others.filter(s => s !== plus && protect.includes(s)),
+    others.filter(s => s === plus),
+  ];
   while (over > 0) {
-    const pool = others.filter(s => sps[s] > 0 && s !== plus);
-    const from = (pool.length ? pool : others.filter(s => sps[s] > 0)).sort((a, b) => sps[b] - sps[a])[0];
-    if (!from) break;
+    const tier = tiers.find(t => t.some(s => sps[s] > 0));
+    if (!tier) break;
+    const from = tier.filter(s => sps[s] > 0).sort((a, b) => sps[b] - sps[a])[0];
     sps[from]--;
     taken.set(from, (taken.get(from) ?? 0) + 1);
     over--;
