@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {FORMAT} from './data';
-import type {PokemonSet, Team} from './team';
+import type {Folder, PokemonSet, Team} from './team';
 
 const KEY = 'teamforge.v1';
 const HISTORY = 50;
@@ -11,11 +11,26 @@ interface Saved {
   teams: Team[];
   activeId: string;
   source: string;
+  folders?: Folder[];
 }
+
+/** Changes to these count as editing the team ("last edited"); Playmat and match log activity doesn't. */
+const EDIT_KEYS: (keyof Team)[] = ['sets', 'name', 'notes', 'tags', 'hidden', 'noMegas'];
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-export const newTeam = (name = 'New Team'): Team => ({id: newId(), name, sets: []});
+export const newTeam = (name = 'New Team'): Team => {
+  const now = Date.now();
+  return {id: newId(), name, sets: [], createdAt: now, updatedAt: now};
+};
+
+/** Apply fn to a team; stamp updatedAt only when one of its own fields really changed. */
+function touch(t: Team, fn: (t: Team) => Team): Team {
+  const n = fn(t);
+  // Shallow first: untouched fields keep their references, so only changed ones get compared in full.
+  const edited = EDIT_KEYS.some(k => n[k] !== t[k] && JSON.stringify(n[k]) !== JSON.stringify(t[k]));
+  return edited ? {...n, updatedAt: Date.now()} : n;
+}
 
 function load(): Saved {
   let raw: string | null = null;
@@ -79,8 +94,11 @@ export function useStore() {
 
   const team = state.teams.find(t => t.id === state.activeId) ?? state.teams[0];
 
+  const updateTeamById = useCallback((id: string, fn: (t: Team) => Team, key?: string) => {
+    commit(s => ({...s, teams: s.teams.map(t => (t.id === id ? touch(t, fn) : t))}), key);
+  }, [commit]);
   const updateTeam = useCallback((fn: (t: Team) => Team, key?: string) => {
-    commit(s => ({...s, teams: s.teams.map(t => (t.id === s.activeId ? fn(t) : t))}), key);
+    commit(s => ({...s, teams: s.teams.map(t => (t.id === s.activeId ? touch(t, fn) : t))}), key);
   }, [commit]);
 
   const setSets = useCallback(
@@ -124,18 +142,43 @@ export function useStore() {
     setMatches: (fn: (m: NonNullable<Team['matches']>) => NonNullable<Team['matches']>, key?: string) =>
       updateTeam(t => ({...t, matches: fn(t.matches ?? [])}), key),
     select: (id: string) => setState(s => ({...s, activeId: id})),
-    create: (sets: PokemonSet[] = [], name?: string) => {
-      const t = {...newTeam(name), sets};
+    /** A new team (made active); `extra` sets folder, tags or notes. Returns its id. */
+    create: (sets: PokemonSet[] = [], name?: string, extra: Partial<Pick<Team, 'folder' | 'tags' | 'notes'>> = {}) => {
+      const t = {...newTeam(name), sets, ...extra};
+      commit(s => ({...s, teams: [...s.teams, t], activeId: t.id}));
+      return t.id;
+    },
+    duplicate: (id = team.id) => {
+      const src = state.teams.find(t => t.id === id) ?? team;
+      const now = Date.now();
+      // Sets, folder, tags and notes come along; Playmat, boards and the match log stay with the original.
+      const t: Team = {
+        id: newId(), name: src.name + ' (copy)', sets: structuredClone(src.sets), folder: src.folder,
+        tags: src.tags && [...src.tags], notes: src.notes, hidden: src.hidden, noMegas: src.noMegas, createdAt: now, updatedAt: now,
+      };
       commit(s => ({...s, teams: [...s.teams, t], activeId: t.id}));
     },
-    duplicate: () => {
-      const t = {...team, id: newId(), name: team.name + ' (copy)', sets: structuredClone(team.sets)};
-      commit(s => ({...s, teams: [...s.teams, t], activeId: t.id}));
-    },
-    remove: () => commit(s => {
-      const teams = s.teams.filter(t => t.id !== s.activeId);
+    remove: (id = team.id) => commit(s => {
+      const teams = s.teams.filter(t => t.id !== id);
       const rest = teams.length ? teams : [newTeam('My M-C Team')];
-      return {...s, teams: rest, activeId: rest[0].id};
+      return {...s, teams: rest, activeId: rest.some(t => t.id === s.activeId) ? s.activeId : rest[0].id};
     }),
+    /** Folder, tags, favourite or notes of any team (not only the open one). */
+    setTeamMeta: (id: string, patch: Partial<Pick<Team, 'folder' | 'tags' | 'favorite' | 'notes'>>, key?: string) =>
+      updateTeamById(id, t => ({...t, ...patch}), key),
+    folders: state.folders ?? [],
+    addFolder: (name: string) => {
+      const f = {id: newId(), name};
+      commit(s => ({...s, folders: [...(s.folders ?? []), f]}));
+      return f.id;
+    },
+    renameFolder: (id: string, name: string) =>
+      commit(s => ({...s, folders: (s.folders ?? []).map(f => (f.id === id ? {...f, name} : f))}), `rename-folder-${id}`),
+    /** The folder goes; its teams move to Unsorted. */
+    deleteFolder: (id: string) => commit(s => ({
+      ...s,
+      folders: (s.folders ?? []).filter(f => f.id !== id),
+      teams: s.teams.map(t => (t.folder === id ? {...t, folder: undefined} : t)),
+    })),
   };
 }

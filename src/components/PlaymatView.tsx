@@ -1,7 +1,7 @@
 import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {SPECIES, STAT_LABEL, STATS, TYPE_COLOR, MOVES, pct, type UsageSource} from '../lib/data';
 import {WEATHER_LABEL, teamField} from '../lib/analysis';
-import {metaSet} from '../lib/calc';
+import {fillSpreads, metaSet} from '../lib/calc';
 import {leadAdvice, rankPlans} from '../lib/matchup';
 import {encodeMat} from '../lib/matshare';
 import {
@@ -808,11 +808,7 @@ function OpponentPicker({usage, onSet}: {usage: UsageSource; onSet: (name: strin
   const spOpts = useMemo(() => speciesOptions(usage), [usage]);
 
   /** Open team sheets have no spreads: take the most common meta spread (and item/ability if missing). */
-  const fill = (team: PokemonSet[]) => team.map(s => {
-    if (Object.values(s.sps).some(v => v > 0)) return s;
-    const meta = metaSet(s.species, usage);
-    return {...s, nature: meta.nature, sps: meta.sps, item: s.item || meta.item, ability: s.ability || meta.ability, moves: s.moves.length ? s.moves : meta.moves, estimated: true};
-  });
+  const fill = (team: PokemonSet[]) => fillSpreads(team, usage);
 
   const load = async () => {
     setError('');

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "data": "node scripts/build-data.mjs",
     "typecheck": "tsc -b",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/deploy.sh",
+    "tournament": "node scripts/import-vgcpastes.mjs"
   },
   "dependencies": {
     "@pkmn/dex": "^0.10.11",

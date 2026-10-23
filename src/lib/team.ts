@@ -34,6 +34,20 @@ export interface Team {
   matches?: Match[];
   /** Every Playmat board of this team, newest first; the open one is mirrored here on every change. */
   boards?: SavedBoard[];
+  /** Folder id; missing = Unsorted. */
+  folder?: string;
+  tags?: string[];
+  favorite?: boolean;
+  /** Game plan, leads, thoughts. */
+  notes?: string;
+  /** ms since epoch; updatedAt changes with edits to the team itself (not Playmat or match log activity). */
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
 }
 
 /** An opponent team the planning tabs can work against instead of the meta. */
