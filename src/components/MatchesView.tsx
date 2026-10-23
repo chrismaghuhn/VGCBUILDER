@@ -285,7 +285,12 @@ function MatchRow({m, onEdit, onDelete, onOpen}: {m: Match; onEdit: () => void; 
       )}
       {m.notes && <span className="min-w-0 flex-1 truncate text-[12px] text-dim" title={m.notes}>{m.notes}</span>}
       <span className="ml-auto flex shrink-0 gap-2 text-[11.5px]">
-        {m.replay && <button className="text-info underline hover:text-ink" onClick={onOpen} title="Watch on the Playmat">replay</button>}
+        {(m.board || m.replay) && (
+          <button className="text-info underline hover:text-ink" onClick={onOpen}
+            title={m.board ? 'Open the board of this game on the Playmat (with your notes)' : 'Watch the replay on the Playmat'}>
+            {m.board ? 'board' : 'replay'}
+          </button>
+        )}
         <button className="text-faint underline hover:text-ink" onClick={onEdit}>edit</button>
         <button className="text-faint underline hover:text-bad" onClick={onDelete}>delete</button>
       </span>

@@ -11,21 +11,25 @@ import {activeFighters, autoTargets, canMega, keyOf, matSet, toggleMega, matCalc
 import {matchFromReplay, type Match} from '../lib/matches';
 import {fetchReplay, guessMe, parseReplay, replayId, replayPerspective, replayPlaymat, showStep, type ParsedReplay, type PSide} from '../lib/replay';
 import {decodeShare, fetchPokepaste, pokepasteId, sharePayload} from '../lib/share';
-import {battleForme, importTeam, type MatPlan, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
+import {battleForme, importTeam, type SavedBoard, type MatPlan, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {koLabel} from './MetaView';
 import {speciesOptions} from './SetEditor';
 import {Sprite} from './Sprite';
-import {Combobox, Section, dmgColor} from './ui';
+import {Combobox, Portrait, Section, dmgColor} from './ui';
 
 const BOARD_BG =
   'repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 24px), repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 24px), #050505';
 
 const NOTE_COLORS: Record<MatNote['color'], string> = {gold: '#f5c542', blue: '#5aa9ff', red: '#f0566a', green: '#3ecf8e'};
 
-type Panel = 'suggest' | 'help' | 'replay' | 'log' | 'plan' | 'share';
+type Panel = 'suggest' | 'help' | 'replay' | 'log' | 'plan' | 'share' | 'boards';
 
-export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, savedReplays = []}: {
+export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, savedReplays = [], boards = [], onRenameBoard, onDeleteBoard}: {
+  /** All boards of this team, newest first (the open one included). */
+  boards?: SavedBoard[];
+  onRenameBoard: (id: string, name: string) => void;
+  onDeleteBoard: (id: string) => void;
   sets: PokemonSet[];
   usage: UsageSource;
   mat?: Playmat;
@@ -70,6 +74,11 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
         <Section title="Or watch a Showdown replay">
           <ReplayImport onLoad={openReplay} />
         </Section>
+        {boards.length > 0 && (
+          <Section title={`Your boards (${boards.length})`}>
+            <BoardList boards={boards} onOpen={b => onChange(b.mat)} onRename={onRenameBoard} onDelete={onDeleteBoard} />
+          </Section>
+        )}
       </div>
     );
   }
@@ -189,7 +198,7 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
     const them = r.me === 'p1' ? 'p2' : 'p1';
     // Keep the moves of that turn as a starting point, but not what really happened: this is the alternative.
     const actions = Object.fromEntries(Object.entries(mat.actions ?? {}).map(([k, a]) => [k, {move: a.move, targets: a.targets}]));
-    const free: Playmat = {...mat, actions, replay: undefined, team: r.mine, name: `${r.replay.players[them]} · from ${turnTitle(turn).toLowerCase()}`};
+    const free: Playmat = {...mat, id: undefined, actions, replay: undefined, team: r.mine, name: `${r.replay.players[them]} · from ${turnTitle(turn).toLowerCase()}`};
     onChange(newPlan(free, `Alt from ${turnTitle(turn).toLowerCase()}`, Math.max(1, turn), r.turnNotes[turn] ?? ''));
     setPanel('plan');
   };
@@ -279,6 +288,7 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
         onPanel={p => setPanel(panel === p ? null : p)}
         replay={!!mat.replay}
         planOpen={!!plan}
+        boardCount={boards.length}
         onPlan={openPlan}
         aimSide={aimSide}
         onAimSide={() => setAimSide(aimSide === 'mine' ? 'theirs' : 'mine')}
@@ -294,6 +304,7 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
             // Turn notes go along into the match notes.
             m.notes = r.replay.steps.map(s => s.turn).filter((t, i, a) => a.indexOf(t) === i)
               .filter(t => r.turnNotes[t]?.trim()).map(t => `${turnTitle(t)}: ${r.turnNotes[t].trim()}`).join('\n');
+            m.board = mat.id;
             onSaveMatch(m);
           })} onLog={() => setPanel(panel === 'log' ? null : 'log')} logOpen={panel === 'log'} onExit={exitReplay}
           onSwap={() => {
@@ -403,6 +414,13 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
       {panel === 'plan' && plan && (
         <Floating side="left" title={`${plan.name} · ${frameTitle(plan, plan.at)}`} onClose={() => setPanel(null)}>
           <PlanNotes plan={plan} onNote={(text, n) => onChange(setFrameNote(mat, text, n), `frame-note-${plan.id}-${n ?? plan.at}`)} onFrame={frame} />
+        </Floating>
+      )}
+      {panel === 'boards' && (
+        <Floating side="right" title={`Boards (${boards.length})`} onClose={() => setPanel(null)}>
+          <BoardList boards={boards} current={mat.id} onRename={onRenameBoard} onDelete={onDeleteBoard}
+            onOpen={b => { setSelected(null); setPanel(b.mat.replay ? 'log' : null); onChange(b.mat); }} />
+          <button className="btn mt-3 w-full justify-center" onClick={() => { setPanel(null); onChange(undefined); }}>+ New board</button>
         </Floating>
       )}
       {panel === 'share' && (
@@ -518,8 +536,9 @@ function fighterByKey(mat: Playmat, sets: PokemonSet[], key: string): Fighter | 
   return s ? {side, index, set: s, key} : null;
 }
 
-function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel, replay, planOpen, onPlan, aimSide, onAimSide, onClearMoves}: {
+function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel, replay, planOpen, onPlan, boardCount, aimSide, onAimSide, onClearMoves}: {
   replay: boolean;
+  boardCount: number;
   planOpen: boolean;
   onPlan: () => void;
   aimSide: MatSide;
@@ -547,6 +566,7 @@ function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-white/5 bg-black/25 px-4 py-2 text-[12px]">
       <span className="flex items-center gap-2">
+        <button className={chip(panel === 'boards')} onClick={() => onPanel('boards')} title="All boards of this team">Boards{boardCount > 1 ? ` · ${boardCount}` : ''}</button>
         <span className="font-display text-[14px] font-semibold">{name}</span>
         <button className="text-[11.5px] text-faint underline hover:text-ink" onClick={onChangeOpponent}>change</button>
       </span>
@@ -1295,5 +1315,51 @@ function ShareBoard({mat, sets}: {mat: Playmat; sets: PokemonSet[]}) {
       {error && <p className="text-[12px] text-bad">{error}</p>}
       <p className="text-[11px] text-faint">Everything after the # stays in the browser and is never sent to a server.</p>
     </div>
+  );
+}
+
+/** The team's saved boards: open, rename, delete. */
+function BoardList({boards, current, onOpen, onRename, onDelete}: {
+  boards: SavedBoard[]; current?: string; onOpen: (b: SavedBoard) => void; onRename: (id: string, name: string) => void; onDelete: (id: string) => void;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const when = (t: number) => new Date(t).toLocaleString(undefined, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+  return (
+    <ul className="divide-y divide-line">
+      {boards.map(b => {
+        const notes = b.mat.notes.length + (b.mat.plans ?? []).reduce((n, p) => n + p.frames.filter(f => f.note.trim()).length, 0)
+          + Object.values(b.mat.replay?.turnNotes ?? {}).filter(t => t.trim()).length;
+        const tags = [
+          b.mat.replay && 'Replay',
+          b.mat.plans?.length && `${b.mat.plans.length} plan${b.mat.plans.length > 1 ? 's' : ''}`,
+          notes > 0 && `${notes} note${notes > 1 ? 's' : ''}`,
+        ].filter(Boolean) as string[];
+        return (
+          <li key={b.id} className={`py-2 ${b.id === current ? 'bg-white/[.04] -mx-1 px-1' : ''}`}>
+            <div className="flex items-center gap-2">
+              {editing === b.id ? (
+                <input className="field !py-0.5 text-[12.5px]" autoFocus defaultValue={b.mat.name}
+                  onBlur={e => { onRename(b.id, e.target.value.trim() || b.mat.name); setEditing(null); }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(null); }} />
+              ) : (
+                <button className="min-w-0 flex-1 truncate text-left text-[13px] font-medium hover:underline" onClick={() => onOpen(b)} title="Open">
+                  {b.mat.name || 'Board'}
+                </button>
+              )}
+              {b.id === current && <span className="text-[11px] text-faint">open</span>}
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="flex gap-0.5">{b.mat.opp.slice(0, 6).map((s, i) => <Portrait key={i} name={battleForme(s)} size={20} />)}</span>
+              <span className="num text-[11px] text-faint">{when(b.savedAt)}</span>
+              {tags.map(t => <span key={t} className="border border-line px-1 text-[10.5px] text-dim">{t}</span>)}
+              <span className="ml-auto flex gap-2 text-[11.5px]">
+                <button className="text-faint underline hover:text-ink" onClick={() => setEditing(b.id)}>rename</button>
+                <button className="text-faint underline hover:text-bad" onClick={() => { if (confirm(`Delete "${b.mat.name}"?`)) onDelete(b.id); }}>delete</button>
+              </span>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
