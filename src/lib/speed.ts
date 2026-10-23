@@ -1,4 +1,4 @@
-import {NATURES, SP_MAX, SP_TOTAL, SPECIES, STATS, type StatID} from './data';
+import {NATURES, SP_MAX, SP_TOTAL, SPECIES, STATS, type StatID, type StatTable} from './data';
 import {effectiveSpeed, type SpeedField} from './analysis';
 import {battleForme, type PokemonSet} from './team';
 
@@ -48,17 +48,23 @@ export function speedNeed(set: PokemonSet, target: number, field: SpeedField, tr
   return best === target ? {kind: 'tie'} : {kind: 'impossible'};
 }
 
+/** Apply a Spe SP value (and nature); see applySps for how the budget is kept. */
+export function applySpeed(set: PokemonSet, sp: number, nature = set.nature) {
+  return applySps(set, {spe: sp}, nature);
+}
+
 /**
- * Apply a Spe SP value (and nature). When the total goes over 66, the extra SP come out of the
- * other stats one point at a time from whichever is highest, so investments even out instead of
- * one stat being emptied. The nature-boosted stat is only touched when nothing else is left.
+ * Set some stats' SP (and optionally the nature). When the total goes over 66, the extra SP come
+ * out of the other stats one point at a time from whichever is highest, so investments even out
+ * instead of one stat being emptied. The changed stats and the nature-boosted stat are protected
+ * unless nothing else is left.
  */
-export function applySpeed(set: PokemonSet, sp: number, nature = set.nature): {set: PokemonSet; taken: [StatID, number][]} {
-  const sps = {...set.sps, spe: sp};
+export function applySps(set: PokemonSet, changes: Partial<StatTable>, nature = set.nature): {set: PokemonSet; taken: [StatID, number][]} {
+  const sps = {...set.sps, ...changes};
   let over = STATS.reduce((a, s) => a + sps[s], 0) - SP_TOTAL;
   const taken = new Map<StatID, number>();
   const [plus] = NATURES[nature] ?? [null, null];
-  const others = STATS.filter(s => s !== 'spe');
+  const others = STATS.filter(s => !(s in changes));
   while (over > 0) {
     const pool = others.filter(s => sps[s] > 0 && s !== plus);
     const from = (pool.length ? pool : others.filter(s => sps[s] > 0)).sort((a, b) => sps[b] - sps[a])[0];
