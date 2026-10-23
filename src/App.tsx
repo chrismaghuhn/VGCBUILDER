@@ -6,7 +6,7 @@ import {battleForme, validateTeam, type PokemonSet} from './lib/team';
 import {AnalysisView} from './components/AnalysisView';
 import {BulkView} from './components/BulkView';
 import {CalcView, makeSide, type Side} from './components/CalcView';
-import {MatchupView} from './components/MatchupView';
+import {PlaymatView} from './components/PlaymatView';
 import {MetaView} from './components/MetaView';
 import {OffenseView} from './components/OffenseView';
 import {PasteDialog} from './components/PasteDialog';
@@ -27,7 +27,7 @@ const PAGES = [
   {key: 'speed', label: 'Speed'},
   {key: 'bulk', label: 'Bulk'},
   {key: 'meta', label: 'Meta'},
-  {key: 'matchup', label: 'Matchup'},
+  {key: 'playmat', label: 'Playmat'},
   {key: 'calc', label: 'Calc'},
 ] as const;
 type Page = (typeof PAGES)[number]['key'];
@@ -106,7 +106,7 @@ export default function App() {
   };
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 pb-16 pt-4 sm:px-6">
+    <div className={`mx-auto px-4 pt-4 sm:px-6 ${page === 'playmat' ? 'max-w-none pb-4' : 'max-w-[1440px] pb-16'}`}>
       {/* Header */}
       <header className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-3">
@@ -138,49 +138,51 @@ export default function App() {
         </div>
       </header>
 
-      {/* Team row: shared by all pages */}
-      <div className="panel mb-5 p-3">
-        <div className="mb-2.5 flex flex-wrap items-center gap-2">
-          {store.teams.length > 1 && (
-            <select
-              className="field !w-auto !py-1 text-xs text-dim"
-              value=""
-              onChange={e => { store.select(e.target.value); setSelected(0); }}
-              title="Switch team"
-            >
-              <option value="" disabled>Teams ({store.teams.length})</option>
-              {store.teams.map(t => <option key={t.id} value={t.id}>{t.id === team.id ? '● ' : ''}{t.name}</option>)}
-            </select>
-          )}
-          <input
-            className="min-w-0 flex-1 bg-transparent px-1 font-display text-lg font-semibold tracking-wide outline-none placeholder:text-faint focus:text-gold"
-            value={team.name}
-            onChange={e => store.rename(e.target.value)}
-            aria-label="Team name"
-          />
-          <CheckBar sets={sets} errors={errorCount} onClick={() => setPage('analyse')} />
-          <div className="flex gap-1.5">
-            <button className="btn !px-2.5 !py-1 text-xs disabled:opacity-35" onClick={store.undo} disabled={!store.canUndo} title="Undo (Ctrl+Z)">↶</button>
-            <button className="btn !py-1 text-xs" onClick={() => { store.create(); setSelected(0); setPage('bauen'); }}>+ New</button>
-            <button className="btn !py-1 text-xs" onClick={store.duplicate} title="Duplicate">⧉</button>
-            <button className="btn !py-1 text-xs" onClick={() => setDialog('import')}>Import</button>
-            <button className="btn btn-gold !py-1 text-xs" onClick={() => setDialog('export')} disabled={!sets.length}>Export</button>
-            <button className="btn !px-2.5 !py-1 text-xs hover:!border-bad/60 hover:!text-bad" onClick={() => { if (confirm(`Delete "${team.name}"?`)) store.remove(); }} title="Delete team">🗑</button>
+      {/* Team row: shared by all pages except the Playmat, where the team is on the board */}
+      {page !== 'playmat' && (
+        <div className="panel mb-5 p-3">
+          <div className="mb-2.5 flex flex-wrap items-center gap-2">
+            {store.teams.length > 1 && (
+              <select
+                className="field !w-auto !py-1 text-xs text-dim"
+                value=""
+                onChange={e => { store.select(e.target.value); setSelected(0); }}
+                title="Switch team"
+              >
+                <option value="" disabled>Teams ({store.teams.length})</option>
+                {store.teams.map(t => <option key={t.id} value={t.id}>{t.id === team.id ? '● ' : ''}{t.name}</option>)}
+              </select>
+            )}
+            <input
+              className="min-w-0 flex-1 bg-transparent px-1 font-display text-lg font-semibold tracking-wide outline-none placeholder:text-faint focus:text-gold"
+              value={team.name}
+              onChange={e => store.rename(e.target.value)}
+              aria-label="Team name"
+            />
+            <CheckBar sets={sets} errors={errorCount} onClick={() => setPage('analyse')} />
+            <div className="flex gap-1.5">
+              <button className="btn !px-2.5 !py-1 text-xs disabled:opacity-35" onClick={store.undo} disabled={!store.canUndo} title="Undo (Ctrl+Z)">↶</button>
+              <button className="btn !py-1 text-xs" onClick={() => { store.create(); setSelected(0); setPage('bauen'); }}>+ New</button>
+              <button className="btn !py-1 text-xs" onClick={store.duplicate} title="Duplicate">⧉</button>
+              <button className="btn !py-1 text-xs" onClick={() => setDialog('import')}>Import</button>
+              <button className="btn btn-gold !py-1 text-xs" onClick={() => setDialog('export')} disabled={!sets.length}>Export</button>
+              <button className="btn !px-2.5 !py-1 text-xs hover:!border-bad/60 hover:!text-bad" onClick={() => { if (confirm(`Delete "${team.name}"?`)) store.remove(); }} title="Delete team">🗑</button>
+            </div>
           </div>
+          <TeamBar
+            sets={sets}
+            selected={page === 'bauen' ? sel : planning ? Math.min(planSel, sets.length - 1) : -1}
+            issues={issues}
+            onSelect={i => {
+              // On the planning tabs a click picks the Pokémon to plan for; elsewhere it opens the editor.
+              if (planning && i < sets.length) setPlanSel(i);
+              else { setSelected(i); setPage('bauen'); }
+            }}
+            onRemove={removeSlot}
+            onMove={(from, to) => { setSets(p => { const n = [...p]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; }); setSelected(to); }}
+          />
         </div>
-        <TeamBar
-          sets={sets}
-          selected={page === 'bauen' ? sel : planning ? Math.min(planSel, sets.length - 1) : -1}
-          issues={issues}
-          onSelect={i => {
-            // On the planning tabs a click picks the Pokémon to plan for; elsewhere it opens the editor.
-            if (planning && i < sets.length) setPlanSel(i);
-            else { setSelected(i); setPage('bauen'); }
-          }}
-          onRemove={removeSlot}
-          onMove={(from, to) => { setSets(p => { const n = [...p]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; }); setSelected(to); }}
-        />
-      </div>
+      )}
 
       {page === 'bauen' && (
         <div className="mx-auto max-w-[980px]">
@@ -223,10 +225,10 @@ export default function App() {
       {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
       {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
-      {page === 'matchup' && <MatchupView sets={sets} usage={usage} matchup={team.matchup} onChange={store.setMatchup} />}
+      {page === 'playmat' && <PlaymatView sets={sets} usage={usage} mat={team.playmat} onChange={store.setPlaymat} />}
       {page === 'calc' && <CalcView sets={sets} usage={usage} pair={calcPair} setPair={setCalcPair} />}
 
-      <footer className="mt-12 border-t border-line pt-4 text-[11.5px] text-faint">
+      <footer className={`mt-12 border-t border-line pt-4 text-[11.5px] text-faint ${page === 'playmat' ? 'hidden' : ''}`}>
         <a className="underline hover:text-dim" href="https://www.smogon.com/stats/" target="_blank" rel="noreferrer">Smogon</a> ({usage.label}, {usage.month}) ·
         Showdown <code>champions</code> mod · @smogon/calc ·
         Portraits: <a className="underline hover:text-dim" href="https://github.com/PMDCollab/SpriteCollab" target="_blank" rel="noreferrer">PMD SpriteCollab</a> (CC BY-NC 4.0)

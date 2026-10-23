@@ -22,17 +22,43 @@ export interface Team {
   hidden?: string[];
   /** Leave Mega Evolutions out of teammate suggestions. */
   noMegas?: boolean;
-  /** Opponent and plan on the Matchup tab. */
-  matchup?: Matchup;
+  /** The Playmat: opponent, board state and notes. */
+  playmat?: Playmat;
 }
 
-export interface Matchup {
+export type MatSide = 'mine' | 'theirs';
+
+export interface MatField {
+  weather: '' | 'Rain' | 'Sun' | 'Sand' | 'Snow';
+  terrain: '' | 'Electric' | 'Grassy' | 'Psychic' | 'Misty';
+  trickRoom: boolean;
+  tailwind: Record<MatSide, boolean>;
+  reflect: Record<MatSide, boolean>;
+  lightScreen: Record<MatSide, boolean>;
+}
+
+export interface MatNote {
+  id: string;
+  /** Position on the board in % of its size. */
+  x: number;
+  y: number;
+  text: string;
+  color: 'gold' | 'blue' | 'red' | 'green';
+}
+
+export interface Playmat {
   name: string;
   opp: PokemonSet[];
-  /** Their leads the user expects (indices into opp); null = weigh by lead stats. */
-  expected: [number, number] | null;
-  /** The user's own arrangement (indices into the team); null = follow the best plan. */
-  plan: {bring: number[]; lead: number[]} | null;
+  /** Who stands on the two battle spots per side (index into my team / opp, null = empty). */
+  mine: [number | null, number | null];
+  theirs: [number | null, number | null];
+  /** My four brought Pokémon. */
+  brought: number[];
+  /** HP in % and stat stages per Pokémon, keyed "m0".."m5" / "t0".."t5". */
+  hp: Record<string, number>;
+  boosts: Record<string, Partial<Record<'atk' | 'def' | 'spa' | 'spd' | 'spe', number>>>;
+  field: MatField;
+  notes: MatNote[];
 }
 
 export const emptySps = (): StatTable => ({hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0});
