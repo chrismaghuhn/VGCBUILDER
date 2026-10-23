@@ -8,12 +8,14 @@ import {CalcView, makeSide, type Side} from './components/CalcView';
 import {MetaView} from './components/MetaView';
 import {PasteDialog} from './components/PasteDialog';
 import {Picker} from './components/Picker';
+import {SearchView} from './components/SearchView';
 import {SetEditor} from './components/SetEditor';
 import {TeamBar} from './components/TeamBar';
 import type {WeatherPref, WeatherState} from './components/ui';
 
 const PAGES = [
   {key: 'bauen', label: 'Bauen'},
+  {key: 'suche', label: 'Suche'},
   {key: 'analyse', label: 'Analyse'},
   {key: 'meta', label: 'Meta'},
   {key: 'calc', label: 'Calc'},
@@ -35,6 +37,7 @@ export default function App() {
   const [dialog, setDialog] = useState<'import' | 'export' | null>(null);
   const [calcPair, setCalcPair] = useState<[Side, Side] | null>(null);
   const [weatherPref, setWeatherPref] = useState<WeatherPref>('auto');
+  const [searchQuery, setSearchQuery] = useState('');
   const [enemyWeather, setEnemyWeather] = useState(false);
   const weather: WeatherState = {pref: weatherPref, setPref: setWeatherPref, enemy: enemyWeather, setEnemy: setEnemyWeather};
 
@@ -168,6 +171,15 @@ export default function App() {
             <Picker sets={sets} slot={sel} usage={usage} onPick={s => { setSlot(sel, s); setSelected(sel + 1); }} />
           ) : null}
         </div>
+      )}
+      {page === 'suche' && (
+        <SearchView
+          sets={sets}
+          usage={usage}
+          query={searchQuery}
+          setQuery={setSearchQuery}
+          onAdd={s => { if (sets.length < 6) setSets(p => [...p, s]); }}
+        />
       )}
       {page === 'analyse' && <AnalysisView sets={sets} usage={usage} issues={issues} weather={weather} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
