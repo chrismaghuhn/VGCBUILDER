@@ -30,13 +30,13 @@ export function Picker({sets, slot, usage, onPick}: {sets: PokemonSet[]; slot: n
           className="min-w-[240px] flex-1"
           value=""
           options={spOpts}
-          placeholder="Pokémon suchen …"
+          placeholder="Search Pokémon …"
           autoFocus
           onChange={n => onPick(popularSet(n, usage, takenItems))}
         />
       </div>
 
-      <div className="label mb-2 mt-5">{sets.length ? 'Passt ins Team' : 'Meta-Picks'}</div>
+      <div className="label mb-2 mt-5">{sets.length ? 'Fits your team' : 'Meta picks'}</div>
       <div className={`grid gap-2 sm:grid-cols-2 xl:grid-cols-3 ${stale ? 'opacity-60' : ''}`}>
         {suggestions.map((s, i) => {
           const sp = SPECIES[s.name];

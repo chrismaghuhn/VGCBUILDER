@@ -37,11 +37,11 @@ export function PasteDialog({mode, sets, onImport, onClose}: {
             {mode === 'export' ? (
               <button className="btn btn-gold" onClick={async () => {
                 try { await navigator.clipboard.writeText(text); setCopied(true); } catch { /* clipboard blocked */ }
-              }}>{copied ? '✓ Kopiert' : 'Kopieren'}</button>
+              }}>{copied ? '✓ Copied' : 'Copy'}</button>
             ) : (
               <>
-                <button className="btn" disabled={!parsed?.sets.length} onClick={() => parsed && onImport(parsed.sets, true)}>Als neues Team</button>
-                <button className="btn btn-gold" disabled={!parsed?.sets.length} onClick={() => parsed && onImport(parsed.sets, false)}>Aktuelles ersetzen</button>
+                <button className="btn" disabled={!parsed?.sets.length} onClick={() => parsed && onImport(parsed.sets, true)}>As new team</button>
+                <button className="btn btn-gold" disabled={!parsed?.sets.length} onClick={() => parsed && onImport(parsed.sets, false)}>Replace current</button>
               </>
             )}
           </div>

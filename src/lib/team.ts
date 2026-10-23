@@ -86,37 +86,37 @@ export function validateTeam(sets: PokemonSet[]): Issue[] {
   sets.forEach((set, slot) => {
     const sp = getSpecies(set.species);
     if (!sp) {
-      issues.push({slot, level: 'error', text: `${set.species} ist in Reg M-C nicht legal.`});
+      issues.push({slot, level: 'error', text: `${set.species} is not legal in Reg M-C.`});
       return;
     }
     const dup = seenSpecies.get(sp.num);
-    if (dup !== undefined) issues.push({slot, level: 'error', text: `Species Clause: ${set.species} doppelt (Slot ${dup + 1}).`});
+    if (dup !== undefined) issues.push({slot, level: 'error', text: `Species Clause: ${set.species} duplicates slot ${dup + 1}.`});
     seenSpecies.set(sp.num, slot);
     if (set.item) {
-      if (!ITEM_NAMES.includes(set.item)) issues.push({slot, level: 'error', text: `Item ${set.item} ist nicht legal.`});
+      if (!ITEM_NAMES.includes(set.item)) issues.push({slot, level: 'error', text: `${set.item} is not legal in Reg M-C.`});
       const d = seenItems.get(set.item);
-      if (d !== undefined) issues.push({slot, level: 'error', text: `Item Clause: ${set.item} doppelt (Slot ${d + 1}).`});
+      if (d !== undefined) issues.push({slot, level: 'error', text: `Item Clause: ${set.item} duplicates slot ${d + 1}.`});
       seenItems.set(set.item, slot);
       const it = getItem(set.item);
       if (it?.mega && !megaForme(set.species, set.item))
-        issues.push({slot, level: 'warn', text: `${set.item} hat bei ${set.species} keinen Effekt.`});
+        issues.push({slot, level: 'warn', text: `${set.item} does nothing on ${set.species}.`});
     } else {
-      issues.push({slot, level: 'warn', text: `${set.species} hat kein Item.`});
+      issues.push({slot, level: 'warn', text: `${set.species} has no item.`});
     }
     if (set.ability && !sp.abilities.includes(set.ability))
-      issues.push({slot, level: 'error', text: `${set.species} kann ${set.ability} nicht haben.`});
+      issues.push({slot, level: 'error', text: `${set.species} can't have ${set.ability}.`});
     const total = STATS.reduce((a, s) => a + set.sps[s], 0);
     if (total > SP_TOTAL) issues.push({slot, level: 'error', text: `${set.species}: ${total}/${SP_TOTAL} Stat Points.`});
-    else if (total < SP_TOTAL) issues.push({slot, level: 'warn', text: `${set.species}: ${SP_TOTAL - total} Stat Points ungenutzt.`});
+    else if (total < SP_TOTAL) issues.push({slot, level: 'warn', text: `${set.species}: ${SP_TOTAL - total} unused Stat Points.`});
     for (const s of STATS)
-      if (set.sps[s] > SP_MAX) issues.push({slot, level: 'error', text: `${set.species}: ${STAT_LABEL[s]} über ${SP_MAX} SP.`});
+      if (set.sps[s] > SP_MAX) issues.push({slot, level: 'error', text: `${set.species}: ${STAT_LABEL[s]} above ${SP_MAX} SP.`});
     const moves = set.moves.filter(Boolean);
-    if (moves.length < 4) issues.push({slot, level: 'warn', text: `${set.species} hat nur ${moves.length} Attacken.`});
-    if (new Set(moves).size !== moves.length) issues.push({slot, level: 'error', text: `${set.species} hat eine Attacke doppelt.`});
+    if (moves.length < 4) issues.push({slot, level: 'warn', text: `${set.species} has only ${moves.length} move${moves.length === 1 ? '' : 's'}.`});
+    if (new Set(moves).size !== moves.length) issues.push({slot, level: 'error', text: `${set.species} has a duplicate move.`});
     for (const m of moves)
-      if (!MOVES[m] || !sp.moves.includes(m)) issues.push({slot, level: 'error', text: `${set.species} kann ${m} nicht lernen.`});
+      if (!MOVES[m] || !sp.moves.includes(m)) issues.push({slot, level: 'error', text: `${set.species} can't learn ${m}.`});
   });
-  if (sets.length < 6) issues.push({level: 'warn', text: `Team hat erst ${sets.length}/6 Pokémon.`});
+  if (sets.length < 6) issues.push({level: 'warn', text: `Team has ${sets.length}/6 Pokémon.`});
   return issues;
 }
 
@@ -157,7 +157,7 @@ export function importTeam(text: string): {sets: PokemonSet[]; warnings: string[
     let species = findName(rawName, allSpecies) ?? rawName;
     // Pasted Mega formes go back to their base forme.
     if (SPECIES[species]?.mega) species = SPECIES[species].megaOf ?? SPECIES[species].base;
-    if (!SPECIES[species]) warnings.push(`${rawName}: nicht in Reg M-C legal`);
+    if (!SPECIES[species]) warnings.push(`${rawName}: not legal in Reg M-C`);
     const set = blankSet(species);
     set.ability = '';
     if (head[3]) set.item = findName(head[3].trim(), ITEM_NAMES) ?? head[3].trim();

@@ -34,7 +34,7 @@ export function AnalysisView({sets, usage, issues, weather}: {
       <Summary sets={sets} usage={usage} issues={issues} matrix={matrix} roles={roles} megas={megas.length} field={field} enemyWeather={weather.enemy} />
 
       <div className="grid gap-4 2xl:grid-cols-[1.25fr_1fr]">
-        <Section title="Defensive Typ-Matrix">
+        <Section title="Defensive Type Chart">
           <div className="overflow-x-auto">
             <table className="w-full border-separate border-spacing-[3px] text-center text-[12px]">
               <thead>
@@ -43,7 +43,7 @@ export function AnalysisView({sets, usage, issues, weather}: {
                   {sets.map((s, i) => (
                     <th key={i} className="px-0.5 pb-1"><Portrait name={battleForme(s)} size={30} className="mx-auto" /></th>
                   ))}
-                  <th className="label px-1 text-[10px]">Schw.</th>
+                  <th className="label px-1 text-[10px]">Weak</th>
                   <th className="label px-1 text-[10px]">Res.</th>
                 </tr>
               </thead>
@@ -72,14 +72,14 @@ export function AnalysisView({sets, usage, issues, weather}: {
               {coverage.map(c => (
                 <div
                   key={c.type}
-                  title={c.hitters.length ? `Sehr effektiv: ${c.hitters.join(', ')}` : 'Niemand trifft sehr effektiv'}
+                  title={c.hitters.length ? `Super effective: ${c.hitters.join(', ')}` : 'Nothing hits it super effectively'}
                   className="rounded-lg border px-2 py-1.5"
                   style={{borderColor: c.best > 1 ? `${TYPE_COLOR[c.type]}88` : 'var(--color-line)', background: c.best > 1 ? `${TYPE_COLOR[c.type]}18` : 'transparent'}}
                 >
                   <div className="flex items-center justify-between">
                     <TypeBadge type={c.type} small />
                     <span className={`num text-[11px] font-semibold ${c.best > 1 ? 'text-good' : c.best < 1 ? 'text-bad' : 'text-faint'}`}>
-                      {c.best > 1 ? `${c.hitters.length}×SE` : c.best === 1 ? 'neutral' : 'resist'}
+                      {c.best > 1 ? `${c.hitters.length}×SE` : c.best === 1 ? 'neutral' : 'resisted'}
                     </span>
                   </div>
                 </div>
@@ -87,7 +87,7 @@ export function AnalysisView({sets, usage, issues, weather}: {
             </div>
           </Section>
 
-          <Section title="Rollen-Check">
+          <Section title="Roles">
             <div className="grid gap-1.5 sm:grid-cols-2">
               {roles.map(({role, members}) => {
                 const ok = role.key === 'protect' ? members.length >= 4 : members.length > 0;
@@ -138,13 +138,13 @@ function SpeedTiers({sets, usage, field, weather, autoWeather}: {
         <div className="flex items-center gap-2 text-xs">
           <WeatherControls state={weather} auto={autoWeather} />
           <select className="field !w-auto !py-1 text-xs" value={limit} onChange={e => setLimit(+e.target.value)}>
-            {[20, 40, 80].map(n => <option key={n} value={n}>Top {n} Meta</option>)}
+            {[20, 40, 80].map(n => <option key={n} value={n}>Top {n} meta</option>)}
           </select>
           <button className={`btn !py-1 text-xs ${tailwind ? '!border-info !bg-info/15 text-info' : ''}`} onClick={() => setTailwind(t => !t)}>
-            Tailwind {tailwind ? 'an' : 'aus'}
+            Tailwind {tailwind ? 'on' : 'off'}
           </button>
           <button className={`btn !py-1 text-xs ${trickRoom ? '!border-[#c78cff] !bg-[#c78cff]/15 text-[#e2c6ff]' : ''}`} onClick={() => setTrickRoom(t => !t)}>
-            Trick Room {trickRoom ? 'an' : 'aus'}
+            Trick Room {trickRoom ? 'on' : 'off'}
           </button>
         </div>
       }
@@ -173,7 +173,7 @@ function SpeedTiers({sets, usage, field, weather, autoWeather}: {
   );
 }
 
-export function Empty({text = 'Noch keine Pokémon im Team.'}: {text?: string}) {
+export function Empty({text = 'No Pokémon in the team yet.'}: {text?: string}) {
   return <div className="panel p-10 text-center text-dim">{text}</div>;
 }
 
@@ -200,14 +200,14 @@ function Summary({sets, usage, issues, matrix, roles, megas, field, enemyWeather
   const ok = !errors.length && !missing.length && !weak.length && !threats.length;
 
   return (
-    <Section title={ok ? 'Keine Probleme' : 'Probleme'}>
+    <Section title={ok ? 'No Issues' : 'Issues'}>
       <div className="grid gap-x-8 gap-y-3 md:grid-cols-2">
         {errors.length > 0 && (
-          <Row label="Legalität" tone="bad">{errors.map(e => e.text).join(' · ')}</Row>
+          <Row label="Legality" tone="bad">{errors.map(e => e.text).join(' · ')}</Row>
         )}
-        {missing.length > 0 && <Row label="Fehlt" tone="warn">{missing.join(', ')}</Row>}
+        {missing.length > 0 && <Row label="Missing" tone="warn">{missing.join(', ')}</Row>}
         {weak.length > 0 && (
-          <Row label="Schwächen" tone="warn">
+          <Row label="Weak to" tone="warn">
             <span className="flex flex-wrap gap-1.5">{weak.map(w => <span key={w.type} className="flex items-center gap-1"><TypeBadge type={w.type} small /><span className="num text-xs">{w.weak}×</span></span>)}</span>
           </Row>
         )}
@@ -220,9 +220,9 @@ function Summary({sets, usage, issues, matrix, roles, megas, field, enemyWeather
             </span>
           </Row>
         )}
-        {warns.length > 0 && <Row label="Hinweise" tone="dim">{warns.map(w => w.text).join(' · ')}</Row>}
+        {warns.length > 0 && <Row label="Notes" tone="dim">{warns.map(w => w.text).join(' · ')}</Row>}
         {megas > 1 && <Row label="Megas" tone="dim">{megas}</Row>}
-        {ok && <div className="text-[13px] text-good">Legal, alle Rollen abgedeckt, keine gehäuften Schwächen.</div>}
+        {ok && <div className="text-[13px] text-good">Legal, all key roles covered, no stacked weaknesses.</div>}
       </div>
     </Section>
   );

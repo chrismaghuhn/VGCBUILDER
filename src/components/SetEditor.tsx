@@ -31,7 +31,7 @@ export function speciesOptions(usage: UsageSource, exclude: string[] = []): Opti
   );
   return [
     ...meta.map(x => ({value: x.n, hint: pct(x.u), group: 'Meta', render: render(x.n), hintColor: 'var(--color-gold)'})),
-    ...rest.map(x => ({value: x.n, group: 'Alle', render: render(x.n)})),
+    ...rest.map(x => ({value: x.n, group: 'All', render: render(x.n)})),
   ];
 }
 
@@ -80,8 +80,8 @@ export function SetEditor({
     const common = normal.filter(i => used.has(i)).sort((a, b) => used.get(b)! - used.get(a)!);
     return [
       ...megaStones.map(i => ({value: i, group: 'Mega', hint: megaUsage(i) ? pct(megaUsage(i)) : undefined, hintColor: 'var(--color-gold)'})),
-      ...common.map(i => ({value: i, group: 'Häufig', hint: pct(used.get(i)!)})),
-      ...normal.filter(i => !used.has(i)).map(i => ({value: i, group: 'Alle'})),
+      ...common.map(i => ({value: i, group: 'Common', hint: pct(used.get(i)!)})),
+      ...normal.filter(i => !used.has(i)).map(i => ({value: i, group: 'All'})),
     ];
   }, [u, set.species, usage]);
 
@@ -100,8 +100,8 @@ export function SetEditor({
     };
     const common = all.filter(m => used.has(m)).sort((a, b) => used.get(b)! - used.get(a)!);
     return [
-      ...common.map(m => ({value: m, group: 'Häufig', hint: pct(used.get(m)!), render: render(m)})),
-      ...all.filter(m => !used.has(m)).sort().map(m => ({value: m, group: 'Alle', render: render(m)})),
+      ...common.map(m => ({value: m, group: 'Common', hint: pct(used.get(m)!), render: render(m)})),
+      ...all.filter(m => !used.has(m)).sort().map(m => ({value: m, group: 'All', render: render(m)})),
     ];
   }, [u, baseSp, sp]);
 
@@ -150,7 +150,7 @@ export function SetEditor({
         </div>
         <div className="flex gap-1.5">
           <button className="btn text-xs" onClick={() => onChange(popularSet(set.species, usage))}>★ Meta-Set</button>
-          <button className="btn text-xs hover:!border-bad/60 hover:!text-bad" onClick={onRemove}>Entfernen</button>
+          <button className="btn text-xs hover:!border-bad/60 hover:!text-bad" onClick={onRemove}>Remove</button>
         </div>
       </div>
 
@@ -161,7 +161,7 @@ export function SetEditor({
           <Combobox value={set.item} options={itemOptions} onChange={item => update({item})} placeholder="Item" />
         </div>
         <div>
-          <div className="label mb-1">Fähigkeit</div>
+          <div className="label mb-1">Ability</div>
           {sp?.mega ? (
             <div className="field text-ink">{sp.abilities[0]}</div>
           ) : (
@@ -176,7 +176,7 @@ export function SetEditor({
       </div>
 
       <div className="mt-3">
-        <div className="label mb-1">Attacken</div>
+        <div className="label mb-1">Moves</div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {[0, 1, 2, 3].map(k => {
             const m = set.moves[k] ?? '';
@@ -192,7 +192,7 @@ export function SetEditor({
                     moves[k] = v;
                     update({moves});
                   }}
-                  placeholder={`Attacke ${k + 1}`}
+                  placeholder={`Move ${k + 1}`}
                 />
               </div>
             );
@@ -204,16 +204,16 @@ export function SetEditor({
       <div className="mt-4 rounded-xl border border-line bg-bg/40">
         <button className="flex w-full items-center gap-3 px-3 py-2.5 text-left" onClick={toggleFine}>
           <span className={`text-faint transition ${fineOpen ? 'rotate-90' : ''}`}>▸</span>
-          <span className="label">Feintuning</span>
+          <span className="label">Fine-tuning</span>
           <span className="truncate text-[12.5px] text-dim">
-            <span className="text-ink">{set.nature}</span> · {spreadText(set.sps) || 'keine SP'}
+            <span className="text-ink">{set.nature}</span> · {spreadText(set.sps) || 'no SP'}
           </span>
           <span className={`num ml-auto shrink-0 text-xs ${total > SP_TOTAL ? 'text-bad' : total === SP_TOTAL ? 'text-good' : 'text-warn'}`}>{total}/{SP_TOTAL}</span>
         </button>
         {fineOpen && (
           <div className="border-t border-line px-3 pb-3 pt-3">
             <div className="mb-3 max-w-[260px]">
-              <div className="label mb-1">Wesen</div>
+              <div className="label mb-1">Nature</div>
               <Combobox value={set.nature} options={natureOptions} onChange={nature => update({nature})} />
             </div>
             <div className="space-y-1.5">

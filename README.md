@@ -1,35 +1,37 @@
 # Teamforge VGC
 
-Teambuilder für das aktuelle VGC-Format: **Pokémon Champions, Regulation M-C**.
+Teambuilder for the current VGC format: **Pokémon Champions, Regulation M-C**.
 
-- **Bauen**: 6 Slots, Vorschläge mit Begründung direkt im leeren Slot, Editor mit Item/Fähigkeit/Attacken und eingeklapptem Feintuning (Wesen, Stat Points 66/32, Meta-Spreads). Undo mit Strg+Z.
-- **Analyse**: Problem-Übersicht, defensive Typ-Matrix (inkl. Fähigkeiten/Megas), Coverage, Rollen-Check, Speed Tiers mit Wetter-Fähigkeiten.
-- **Meta**: Threat-Matrix mit echten Damage Calcs (KO-Labels), Wetter inkl. Gegner-Wetter, Leads, Archetypen.
-- **Calc**: Champions-Mechanik via `@smogon/calc`.
-- Legalitätscheck, Showdown-Import/-Export (klassische EVs werden in Stat Points umgerechnet).
+- **Build**: 6 slots, suggestions with reasons right in the empty slot, an editor for item/ability/moves with collapsible fine-tuning (nature, Stat Points 66/32, meta spreads). Undo with Ctrl+Z.
+- **Search**: find Pokémon by function, not just by name. Supports concepts (speed control, pivot, anti-TR, cleric …), moves, abilities, items, types and abbreviations (EQ, TW, HH …). Use spaces for AND and `|` for OR. Results are sorted by how often the matched move/ability/item is actually played.
+- **Analysis**: issue overview, defensive type chart (including abilities/Megas), coverage, role check, speed tiers with weather abilities.
+- **Meta**: threat matrix with real damage calcs (KO labels), weather incl. enemy weather, leads, archetypes.
+- **Calc**: Champions mechanics via `@smogon/calc`.
+- Legality check, Showdown import/export (classic EVs are converted to Stat Points).
+- Usage data: Bo1, Bo3 or Bo1+Bo3 combined (1760+), or Bo1 1500+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Daten aktualisieren
+## Updating data
 
 ```bash
-npm run data   # Legalität/Learnsets (Showdown champions-Mod) + Smogon-Usage + SpriteCollab-Portraits
+npm run data   # legality/learnsets (Showdown champions mod) + Smogon usage + SpriteCollab portraits
 ```
 
-- `npm run data -- 2026-10` lädt einen bestimmten Monat; ohne Argument den neuesten mit M-C-Daten.
-- `REFRESH=1 npm run data` ignoriert den Download-Cache in `scripts/.cache`.
-- `SPRITECOLLAB=/pfad/zu/SpriteCollab` setzt den Pfad zu einem lokalen SpriteCollab-Checkout. Ohne ihn bleiben die vorhandenen Portraits bzw. es wird auf Showdown-Sprites zurückgegriffen.
+- `npm run data -- 2026-10` loads a specific month; without an argument it uses the latest month with M-C data.
+- `REFRESH=1 npm run data` ignores the download cache in `scripts/.cache`.
+- `SPRITECOLLAB=/path/to/SpriteCollab` points to a local SpriteCollab checkout. Without it, existing portraits are kept or Showdown sprites are used as a fallback.
 
-Neue Regulation: `FORMAT`/`SOURCES` in `scripts/build-data.mjs` anpassen und `npm run data` laufen lassen.
+New regulation: adjust `FORMAT`/`SOURCES` in `scripts/build-data.mjs` and run `npm run data`.
 
-## Quellen & Lizenzen
+## Sources & licenses
 
-- Usage-Daten: [Smogon Stats](https://www.smogon.com/stats/)
-- Legalität & Learnsets: [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (`data/mods/champions`)
-- Damage Calc: [@smogon/calc](https://github.com/smogon/damage-calc)
-- Portraits in `public/portraits/`: [PMD SpriteCollab](https://github.com/PMDCollab/SpriteCollab), **CC BY-NC 4.0** (nicht kommerziell). Credits in `public/portraits/CREDITS.txt`.
+- Usage data: [Smogon Stats](https://www.smogon.com/stats/)
+- Legality & learnsets: [Pokémon Showdown](https://github.com/smogon/pokemon-showdown) (`data/mods/champions`)
+- Damage calc: [@smogon/calc](https://github.com/smogon/damage-calc)
+- Portraits in `public/portraits/`: [PMD SpriteCollab](https://github.com/PMDCollab/SpriteCollab), **CC BY-NC 4.0** (non-commercial). Credits in `public/portraits/CREDITS.txt`.
 
-Pokémon und alle zugehörigen Namen sind Marken von Nintendo, Game Freak und The Pokémon Company. Dies ist ein Fanprojekt ohne Verbindung zu diesen Unternehmen.
+Pokémon and all related names are trademarks of Nintendo, Game Freak and The Pokémon Company. This is a fan project not affiliated with them.
