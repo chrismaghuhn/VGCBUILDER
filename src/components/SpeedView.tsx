@@ -19,17 +19,24 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
   const [enemyTailwind, setEnemyTailwind] = useState(false);
   const [vsFastest, setVsFastest] = useState(false);
   const [limit, setLimit] = useState(40);
+  // Icy Wind / Electroweb etc.: stages per side, plus paralysis.
+  const [myStage, setMyStage] = useState(0);
+  const [enemyStage, setEnemyStage] = useState(0);
+  const [myPara, setMyPara] = useState(false);
+  const [enemyPara, setEnemyPara] = useState(false);
+  const [detailed, setDetailed] = useState(false);
 
   const auto = teamField(sets);
-  const field: SpeedField = {weather: weather.pref === 'auto' ? auto.weather : weather.pref, electricTerrain: auto.electricTerrain, tailwind, enemyTailwind};
+  const field: SpeedField = {weather: weather.pref === 'auto' ? auto.weather : weather.pref, electricTerrain: auto.electricTerrain, tailwind, enemyTailwind, myStage, enemyStage, myPara, enemyPara};
   const sel = Math.min(selected, Math.max(0, sets.length - 1));
   const me = sets[sel];
+  const mySpeed = me ? effectiveSpeed(me, field, true).speed : undefined;
 
   const rows = useMemo(() => {
     const all = [...teamSpeeds(sets, field), ...metaSpeeds(usage, limit, field, weather.enemy)]
       .map(r => ({...r, target: !r.mine && vsFastest && r.max ? r.max : r.speed}));
     return all.sort((a, b) => (trickRoom ? a.target - b.target : b.target - a.target) || (a.mine ? -1 : 1));
-  }, [sets, usage, limit, field.weather, field.electricTerrain, tailwind, enemyTailwind, weather.enemy, vsFastest, trickRoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sets, usage, limit, field.weather, field.electricTerrain, tailwind, enemyTailwind, myStage, enemyStage, myPara, enemyPara, weather.enemy, vsFastest, trickRoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const needs = useMemo(() => {
     const m = new Map<string, SpeedNeed>();
@@ -61,6 +68,7 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
             <Toggle on={tailwind} onClick={() => setTailwind(t => !t)} color="info">My Tailwind</Toggle>
             <Toggle on={enemyTailwind} onClick={() => setEnemyTailwind(t => !t)} color="bad">Enemy Tailwind</Toggle>
             <Toggle on={trickRoom} onClick={() => setTrickRoom(t => !t)} color="tr">Trick Room</Toggle>
+            <Toggle on={detailed} onClick={() => setDetailed(d => !d)} color="gold" title="Show bars and notes (spread range, Scarf share, weather abilities)">Details</Toggle>
             <Toggle on={vsFastest} onClick={() => setVsFastest(v => !v)} color="gold" title="Compare against the fastest common spread instead of the most common one">
               vs fastest spread
             </Toggle>
@@ -70,6 +78,11 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
           </div>
         }
       >
+        <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12.5px]">
+          <StageControl label="You" stage={myStage} setStage={setMyStage} para={myPara} setPara={setMyPara} />
+          <StageControl label="Opponents" stage={enemyStage} setStage={setEnemyStage} para={enemyPara} setPara={setEnemyPara} />
+          <span className="text-faint">Icy Wind / Electroweb = −1</span>
+        </div>
         {me && (
           <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px]">
             <span className="text-faint">{me.nature} · {me.sps.spe} Spe SP · pick another Pokémon in the team bar</span>
@@ -87,6 +100,8 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
               max={max}
               isMeta={!r.mine && myNames.has(r.name)}
               isSelected={r.mine && me !== undefined && r.name === battleForme(me)}
+              detailed={detailed}
+              tie={!r.mine && mySpeed !== undefined && r.target === mySpeed}
               need={r.mine ? undefined : needs.get(r.name)}
               trickRoom={trickRoom}
               onApply={(sp, nature) => me && onUpdateSet(sel, applySpeed(me, sp, nature).set)}
@@ -99,7 +114,9 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
   );
 }
 
-function Row({r, max, isMeta, isSelected, need, trickRoom, onApply, me}: {
+function Row({r, max, isMeta, isSelected, need, trickRoom, onApply, me, detailed, tie}: {
+  detailed: boolean;
+  tie: boolean;
   r: SpeedEntry & {target: number};
   max: number;
   isMeta: boolean;
@@ -117,13 +134,18 @@ function Row({r, max, isMeta, isSelected, need, trickRoom, onApply, me}: {
         {isMeta && <span className="shrink-0 rounded bg-line px-1 text-[9.5px] font-semibold uppercase text-dim">Meta</span>}
       </span>
       <span className="num w-9 text-right text-[13px] font-semibold">{r.target}</span>
-      <span className="w-3 text-[10px] text-info" title={r.boosts.join(', ')}>{r.boosts.length ? '▲' : ''}</span>
+      <span className={`w-3 text-[10px] ${r.boosts.some(isBoost) ? 'text-info' : 'text-warn'}`} title={r.boosts.join(', ')}>
+        {r.boosts.length ? (r.boosts.some(isBoost) ? '▲' : '▼') : ''}
+      </span>
+      {tie && <span className="rounded bg-warn/15 px-1 text-[9.5px] font-semibold uppercase text-warn" title="Same speed as your Pokémon: 50/50 who moves first">Tie</span>}
+      {detailed && <>
       <div className="hidden w-28 shrink-0 md:block">
         <div className="h-1.5 rounded-full" style={{width: `${(r.target / max) * 100}%`, background: r.mine ? 'var(--color-gold)' : 'var(--color-line-2)'}} />
       </div>
       <span className="hidden min-w-0 flex-1 truncate text-[11px] text-faint lg:block" title={[...r.boosts, r.note].filter(Boolean).join(' · ')}>
         {[...r.boosts.filter(b => b !== 'Tailwind' && b !== 'Scarf'), r.note].filter(Boolean).join(' · ')}
       </span>
+      </>}
       <span className="ml-auto w-40 shrink-0 text-right">
         {need && me && <NeedChip need={need} trickRoom={trickRoom} onApply={onApply} me={me} />}
       </span>
@@ -155,5 +177,32 @@ function Toggle({on, onClick, color, title, children}: {on: boolean; onClick: ()
     <button className={`btn !py-1 text-xs ${on ? active : ''}`} onClick={onClick} title={title}>
       {children} {on ? 'on' : 'off'}
     </button>
+  );
+}
+
+const STAGES = [-2, -1, 0, 1, 2];
+
+/** Speed-raising modifiers; drops are "-N" stages and paralysis. */
+const isBoost = (label: string) => !/^-\d/.test(label) && label !== 'Para';
+
+function StageControl({label, stage, setStage, para, setPara}: {
+  label: string; stage: number; setStage: (n: number) => void; para: boolean; setPara: (b: boolean) => void;
+}) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="text-dim">{label}</span>
+      <span className="flex overflow-hidden rounded-md border border-line">
+        {STAGES.map(n => (
+          <button key={n} onClick={() => setStage(n)}
+            className={`num px-1.5 py-0.5 text-[11.5px] ${stage === n ? 'bg-gold text-[#1a1406]' : 'text-dim hover:bg-panel-2'}`}>
+            {n > 0 ? `+${n}` : n}
+          </button>
+        ))}
+      </span>
+      <button onClick={() => setPara(!para)}
+        className={`rounded-md border px-1.5 py-0.5 text-[11.5px] ${para ? 'border-warn bg-warn/15 text-warn' : 'border-line text-dim hover:text-ink'}`}>
+        Para
+      </button>
+    </span>
   );
 }
