@@ -25,6 +25,7 @@ export function PlaymatView({sets, usage, mat, onChange}: {
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [panel, setPanel] = useState<'suggest' | 'help' | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
   const ranked = useMemo(
     () => (mat && sets.length ? rankPlans(sets, mat.opp, usage, {weather: teamField(sets).weather}) : null),
     [sets, mat?.opp, usage], // eslint-disable-line react-hooks/exhaustive-deps
@@ -55,13 +56,43 @@ export function PlaymatView({sets, usage, mat, onChange}: {
     set(patch);
   };
   const unplace = (side: MatSide, index: number) => set({[side]: mat[side].map(x => (x === index ? null : x)) as [number | null, number | null]});
-  const onDropSpot = (side: MatSide, spot: 0 | 1) => (e: React.DragEvent) => {
-    const [s, i] = e.dataTransfer.getData('text/mat').split(':');
-    if (s === side) place(side, +i, spot);
-  };
-  const onDropBench = (side: MatSide) => (e: React.DragEvent) => {
-    const [s, i] = e.dataTransfer.getData('text/mat').split(':');
-    if (s === side) unplace(side, +i);
+  /**
+   * Pointer drag (mouse and touch): the sprite follows the cursor, the spots of that side light up and
+   * the nearest one catches it. Dropping on the bench takes a Pokémon off the field. A press without
+   * movement stays a click (select).
+   */
+  const startDrag = (side: MatSide, index: number, fromSpot: boolean) => (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const sx = e.clientX, sy = e.clientY;
+    let active = false;
+    const move = (ev: PointerEvent) => {
+      if (!active && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      active = true;
+      setDrag({side, index, fromSpot, x: ev.clientX, y: ev.clientY, over: dropTarget(side, ev.clientX, ev.clientY)});
+    };
+    const end = (ev: PointerEvent | null) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('keydown', esc);
+      setDrag(null);
+      if (!active) return;
+      // Swallow the click that follows a drag so it doesn't select or deselect anything.
+      const eat = (c: MouseEvent) => { c.stopPropagation(); c.preventDefault(); };
+      window.addEventListener('click', eat, {capture: true, once: true});
+      setTimeout(() => window.removeEventListener('click', eat, {capture: true}), 0);
+      if (!ev) return;
+      const t = dropTarget(side, ev.clientX, ev.clientY);
+      if (t === 'bench') { if (fromSpot) unplace(side, index); }
+      else if (t !== null) place(side, index, t);
+    };
+    const up = (ev: PointerEvent) => end(ev);
+    const cancel = () => end(null);
+    const esc = (ev: KeyboardEvent) => { if (ev.key === 'Escape') end(null); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', esc);
   };
 
   const toggleBrought = (i: number) => {
@@ -96,13 +127,13 @@ export function PlaymatView({sets, usage, mat, onChange}: {
       {/* Everything below the toolbar; floating cards anchor here */}
       <div className="relative flex min-h-0 flex-1 flex-col">
       <Bench side="theirs" ids={mat.opp.map((_, j) => j)} mat={mat} sets={sets} selected={selected} onSelect={setSelected}
-        onDrop={onDropBench('theirs')} />
+        drag={drag} onGrab={startDrag} />
 
       <div className="relative flex flex-1 flex-col" onClick={() => { setSelected(null); setPanel(null); }}>
         <div className="grid flex-1 grid-cols-2 items-end px-6">
           {([0, 1] as const).map(spot => (
-            <Spot key={spot} side="theirs" index={mat.theirs[spot]} mat={mat} sets={sets} selected={selected}
-              onSelect={setSelected} onDrop={onDropSpot('theirs', spot)} offset={spot * 17} />
+            <Spot key={spot} side="theirs" spot={spot} index={mat.theirs[spot]} mat={mat} sets={sets} selected={selected}
+              onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 17} />
           ))}
         </div>
 
@@ -120,8 +151,8 @@ export function PlaymatView({sets, usage, mat, onChange}: {
 
         <div className="grid flex-1 grid-cols-2 items-start px-6">
           {([0, 1] as const).map(spot => (
-            <Spot key={spot} side="mine" index={mat.mine[spot]} mat={mat} sets={sets} selected={selected}
-              onSelect={setSelected} onDrop={onDropSpot('mine', spot)} offset={spot * 23} />
+            <Spot key={spot} side="mine" spot={spot} index={mat.mine[spot]} mat={mat} sets={sets} selected={selected}
+              onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 23} />
           ))}
         </div>
 
@@ -132,7 +163,7 @@ export function PlaymatView({sets, usage, mat, onChange}: {
       </div>
 
       <Bench side="mine" ids={sets.map((_, i) => i)} mat={mat} sets={sets} selected={selected} onSelect={setSelected}
-        onDrop={onDropBench('mine')} onToggleBrought={toggleBrought} />
+        drag={drag} onGrab={startDrag} onToggleBrought={toggleBrought} />
 
       {/* Floating cards */}
       {panel === 'suggest' && best && (
@@ -182,7 +213,52 @@ export function PlaymatView({sets, usage, mat, onChange}: {
         </Floating>
       )}
       </div>
+
+      {drag && <DragGhost drag={drag} set={drag.side === 'mine' ? sets[drag.index] : mat.opp[drag.index]} />}
     </section>
+  );
+}
+
+interface Drag {
+  side: MatSide;
+  index: number;
+  fromSpot: boolean;
+  x: number;
+  y: number;
+  /** Spot (0/1) or 'bench' under the cursor. */
+  over: 0 | 1 | 'bench' | null;
+}
+type Grab = (side: MatSide, index: number, fromSpot: boolean) => (e: React.PointerEvent) => void;
+
+/** Where a Pokémon of `side` would land: the element under the cursor, else the nearest spot within reach. */
+function dropTarget(side: MatSide, x: number, y: number): 0 | 1 | 'bench' | null {
+  const parse = (v?: string) => {
+    if (!v) return null;
+    const [s, w] = v.split(':');
+    if (s !== side) return null;
+    return w === 'bench' ? 'bench' as const : (+w as 0 | 1);
+  };
+  const hit = parse((document.elementFromPoint(x, y)?.closest('[data-drop]') as HTMLElement | null)?.dataset.drop);
+  if (hit !== null) return hit;
+  let best: 0 | 1 | null = null, dist = 200;
+  document.querySelectorAll<HTMLElement>(`[data-drop^="${side}:"]`).forEach(el => {
+    const t = parse(el.dataset.drop);
+    if (t === null || t === 'bench') return;
+    const r = el.getBoundingClientRect();
+    const d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2));
+    if (d < dist) { dist = d; best = t; }
+  });
+  return best;
+}
+
+/** The sprite under the cursor while dragging. */
+function DragGhost({drag, set}: {drag: Drag; set: PokemonSet}) {
+  return (
+    <div className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[70%]" style={{left: drag.x, top: drag.y}}>
+      <div className="rotate-[-4deg] scale-110 drop-shadow-[0_10px_12px_rgba(0,0,0,.6)]">
+        <Sprite name={battleForme(set)} facing={drag.side === 'mine' ? 'up' : 'down'} scale={2.5} fit={110} />
+      </div>
+    </div>
   );
 }
 
@@ -253,15 +329,18 @@ function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel
   );
 }
 
-function Bench({side, ids, mat, sets, selected, onSelect, onDrop, onToggleBrought}: {
+function Bench({side, ids, mat, sets, selected, onSelect, drag, onGrab, onToggleBrought}: {
   side: MatSide; ids: number[]; mat: Playmat; sets: PokemonSet[]; selected: string | null;
-  onSelect: (k: string) => void; onDrop: (e: React.DragEvent) => void; onToggleBrought?: (i: number) => void;
+  onSelect: (k: string) => void; drag: Drag | null; onGrab: Grab; onToggleBrought?: (i: number) => void;
 }) {
   const list = side === 'mine' ? sets : mat.opp;
   const onField = mat[side];
+  // Only a Pokémon dragged off the field can go back to the bench.
+  const target = drag?.side === side && drag.fromSpot;
   return (
-    <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
-      className={`flex items-end gap-2 bg-black/20 px-4 py-1.5 ${side === 'mine' ? 'border-t' : 'border-b'} border-white/5`}>
+    <div data-drop={`${side}:bench`}
+      className={`flex items-end gap-2 px-4 py-1.5 transition ${side === 'mine' ? 'border-t' : 'border-b'} ${
+        target && drag.over === 'bench' ? 'border-gold/60 bg-gold/10' : target ? 'border-white/20 bg-white/[.04]' : 'border-white/5 bg-black/20'}`}>
       <span className={`label w-16 shrink-0 self-center ${side === 'mine' ? 'text-info' : 'text-bad/80'}`}>{side === 'mine' ? 'Your team' : 'Their team'}</span>
       <div className="flex flex-1 flex-wrap items-end gap-1">
         {ids.map((i, k) => {
@@ -270,9 +349,9 @@ function Bench({side, ids, mat, sets, selected, onSelect, onDrop, onToggleBrough
           const brought = side === 'mine' && mat.brought.includes(i);
           return (
             <div key={i} className="flex flex-col items-center">
-              <button draggable onDragStart={e => e.dataTransfer.setData('text/mat', `${side}:${i}`)}
+              <button onPointerDown={onGrab(side, i, active)}
                 onClick={e => { e.stopPropagation(); onSelect(key); }}
-                className={`flex cursor-grab flex-col items-center rounded-lg px-1.5 pt-1 transition active:cursor-grabbing ${selected === key ? 'bg-gold/15' : 'hover:bg-white/5'} ${active ? 'opacity-40' : ''}`}
+                className={`flex cursor-grab touch-none select-none flex-col items-center rounded-lg px-1.5 pt-1 transition active:cursor-grabbing ${selected === key ? 'bg-gold/15' : 'hover:bg-white/5'} ${active || (drag?.side === side && drag.index === i) ? 'opacity-40' : ''}`}
                 title={active ? 'On the field' : 'Drag onto a spot'}>
                 <div className="flex h-14 items-end"><Sprite name={battleForme(list[i])} facing={side === 'mine' ? 'up' : 'down'} fit={56} offset={k * 13} /></div>
                 <span className="text-[11px] text-dim">{list[i].species}</span>
@@ -290,23 +369,31 @@ function Bench({side, ids, mat, sets, selected, onSelect, onDrop, onToggleBrough
   );
 }
 
-function Spot({side, index, mat, sets, selected, onSelect, onDrop, offset}: {
-  side: MatSide; index: number | null; mat: Playmat; sets: PokemonSet[]; selected: string | null;
-  onSelect: (k: string) => void; onDrop: (e: React.DragEvent) => void; offset: number;
+function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, offset}: {
+  side: MatSide; spot: 0 | 1; index: number | null; mat: Playmat; sets: PokemonSet[]; selected: string | null;
+  onSelect: (k: string) => void; drag: Drag | null; onGrab: Grab; offset: number;
 }) {
   const set = index === null ? null : side === 'mine' ? sets[index] : mat.opp[index];
   const ring = side === 'mine' ? '90,169,255' : '240,86,106';
   const key = index === null ? '' : keyOf(side, index);
   const hp = mat.hp[key] ?? 100;
+  // While dragging: this side's spots light up, the one that would catch the drop glows.
+  const valid = drag?.side === side;
+  const over = valid && drag.over === spot;
+  const self = valid && drag.fromSpot && drag.index === index;
+  const pad = over ? `rgba(245,197,66,.28)` : `rgba(${ring},${valid ? '.26' : '.16'})`;
+  const edge = over ? `inset 0 0 0 2px rgba(245,197,66,.9), 0 0 24px rgba(245,197,66,.35)` : `inset 0 0 0 2px rgba(${ring},${valid ? '.75' : '.4'})`;
   return (
-    <div className="flex justify-center" onDragOver={e => e.preventDefault()} onDrop={onDrop}>
+    <div data-drop={`${side}:${spot}`} className={`flex justify-center transition ${drag && !valid ? 'opacity-50' : ''}`}>
       {set ? (
-        <button draggable onDragStart={e => e.dataTransfer.setData('text/mat', `${side}:${index}`)}
+        <button onPointerDown={onGrab(side, index!, true)}
           onClick={e => { e.stopPropagation(); onSelect(key); }}
-          className={`flex cursor-grab flex-col items-center rounded-2xl p-1 transition active:cursor-grabbing ${selected === key ? 'bg-gold/10 outline outline-1 outline-gold/50' : ''}`}>
+          className={`flex cursor-grab touch-none select-none flex-col items-center rounded-2xl p-1 transition active:cursor-grabbing ${selected === key && !drag ? 'bg-gold/10 outline outline-1 outline-gold/50' : ''}`}>
           <div className="relative flex h-[150px] w-44 items-end justify-center">
-            <div className="absolute bottom-0 h-8 w-40 rounded-[50%]" style={{background: `rgba(${ring},.16)`, boxShadow: `inset 0 0 0 2px rgba(${ring},.4)`}} />
-            <div className="relative -mb-1.5"><Sprite name={battleForme(set)} facing={side === 'mine' ? 'up' : 'down'} scale={3} fit={140} offset={offset} /></div>
+            <div className="absolute bottom-0 h-8 w-40 rounded-[50%] transition" style={{background: pad, boxShadow: edge}} />
+            {over && !self && drag.fromSpot && <span className="absolute top-1 rounded bg-black/60 px-1.5 text-[10.5px] text-gold">swap</span>}
+            {over && !self && !drag.fromSpot && <span className="absolute top-1 rounded bg-black/60 px-1.5 text-[10.5px] text-gold">replace</span>}
+            <div className={`relative -mb-1.5 transition ${self ? 'opacity-30' : over ? 'opacity-50' : ''}`}><Sprite name={battleForme(set)} facing={side === 'mine' ? 'up' : 'down'} scale={3} fit={140} offset={offset} /></div>
           </div>
           <span className="mt-1.5 font-display text-[15px] font-semibold">{set.species}</span>
           <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-black/40">
@@ -315,7 +402,8 @@ function Spot({side, index, mat, sets, selected, onSelect, onDrop, offset}: {
         </button>
       ) : (
         <div className="flex h-[190px] w-44 items-center justify-center">
-          <div className="flex h-16 w-40 items-center justify-center rounded-[50%] border border-dashed border-white/15 text-[11.5px] text-faint">drop here</div>
+          <div className={`flex h-16 w-40 items-center justify-center rounded-[50%] border border-dashed text-[11.5px] transition ${
+            over ? 'scale-105 border-gold bg-gold/15 text-gold' : valid ? 'border-white/40 bg-white/5 text-dim' : 'border-white/15 text-faint'}`}>drop here</div>
         </div>
       )}
     </div>
