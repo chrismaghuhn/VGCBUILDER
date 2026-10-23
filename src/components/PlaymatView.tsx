@@ -24,6 +24,7 @@ export function PlaymatView({sets, usage, mat, onChange}: {
   onChange: (m: Playmat | undefined, coalesceKey?: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const [panel, setPanel] = useState<'suggest' | 'help' | null>(null);
   const ranked = useMemo(
     () => (mat && sets.length ? rankPlans(sets, mat.opp, usage, {weather: teamField(sets).weather}) : null),
     [sets, mat?.opp, usage], // eslint-disable-line react-hooks/exhaustive-deps
@@ -80,107 +81,121 @@ export function PlaymatView({sets, usage, mat, onChange}: {
   const order = turnOrder(mat, sets);
 
   return (
-    <div className="grid gap-3 xl:h-[calc(100vh-96px)] xl:min-h-[680px] xl:grid-cols-[250px_minmax(0,1fr)_340px]">
-      {/* Left: opponent + suggestion */}
-      <aside className="panel flex min-h-0 flex-col gap-4 overflow-y-auto p-4">
-        <div>
-          <div className="label">Opponent</div>
-          <div className="mt-0.5 truncate font-display text-lg font-semibold">{mat.name}</div>
-          <button className="btn mt-2 !py-1 text-xs" onClick={() => onChange(undefined)}>Change opponent</button>
-        </div>
-        {best && (
-          <div>
-            <div className="label mb-1.5">Suggested</div>
-            <div className="rounded-lg border border-line bg-bg/40 p-2.5 text-[12.5px]">
-              <div><span className="text-dim">Lead</span> {best.lead.map(i => sets[i].species).join(' + ')}</div>
-              <div><span className="text-dim">Back</span> {best.bring.filter(i => !best.lead.includes(i)).map(i => sets[i].species).join(' · ')}</div>
-              <ul className="mt-1.5 space-y-0.5 text-[11.5px] text-dim">{best.reasons.slice(0, 3).map(r => <li key={r}>✓ {r}</li>)}</ul>
-              <button className="btn mt-2 !py-1 text-xs" onClick={() => set({mine: [best.lead[0], best.lead[1]], brought: best.bring})}>Put on the mat</button>
-            </div>
-          </div>
-        )}
-        {advice.length > 0 && (
-          <div>
-            <div className="label mb-1.5">If they lead …</div>
-            <ul className="space-y-1.5 text-[12px]">
-              {advice.map(a => (
-                <li key={a.pair.join()}>
-                  <button className="w-full rounded-md px-1.5 py-1 text-left hover:bg-panel-2" title="Put these leads on the mat"
-                    onClick={() => set({theirs: [a.pair[0], a.pair[1]], mine: [a.lead[0], a.lead[1]]})}>
-                    <span className="text-dim">{a.pair.map(j => mat.opp[j].species).join(' + ')}</span>
-                    <span className="num ml-1 text-[10px] text-faint">{pct(a.p, 0)}</span>
-                    <span className={`block ${a.same ? 'text-good' : 'text-gold'}`}>→ {a.names.join(' + ')}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </aside>
+    // The mat is the whole page; everything else floats on top of it when needed.
+    <section className="relative flex h-[calc(100vh-88px)] min-h-[620px] flex-col overflow-hidden rounded-2xl border border-line-2" style={{background: BOARD_BG}}>
+      <Toolbar
+        name={mat.name}
+        field={mat.field}
+        onField={setField}
+        onNote={addNote}
+        onChangeOpponent={() => onChange(undefined)}
+        panel={panel}
+        onPanel={p => setPanel(panel === p ? null : p)}
+      />
 
-      {/* Middle: the mat */}
-      <section className="flex min-h-[680px] flex-col overflow-hidden rounded-2xl border border-line-2" style={{background: BOARD_BG}}>
-        <Toolbar field={mat.field} onField={setField} onNote={addNote} />
+      {/* Everything below the toolbar; floating cards anchor here */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <Bench side="theirs" ids={mat.opp.map((_, j) => j)} mat={mat} sets={sets} selected={selected} onSelect={setSelected}
+        onDrop={onDropBench('theirs')} />
 
-        <Bench side="theirs" ids={mat.opp.map((_, j) => j)} mat={mat} sets={sets} selected={selected} onSelect={setSelected}
-          onDrop={onDropBench('theirs')} />
-
-        <div className="relative flex flex-1 flex-col" onClick={() => setSelected(null)}>
-          <div className="grid flex-1 grid-cols-2 items-end px-6">
-            {([0, 1] as const).map(spot => (
-              <Spot key={spot} side="theirs" index={mat.theirs[spot]} mat={mat} sets={sets} selected={selected}
-                onSelect={setSelected} onDrop={onDropSpot('theirs', spot)} offset={spot * 17} />
-            ))}
-          </div>
-
-          {/* Turn order across the middle */}
-          <div className="mx-6 my-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-y border-dashed border-white/10 py-2 text-[12px]">
-            <span className="label mr-1">{mat.field.trickRoom ? 'Order (Trick Room)' : 'Order'}</span>
-            {order.map((f, k) => (
-              <span key={f.key} className="flex items-center gap-1">
-                {k > 0 && <span className="text-faint">›</span>}
-                <span className={f.side === 'mine' ? 'text-info' : 'text-bad'}>{f.set.species}</span>
-                <span className="num text-faint">{f.speed}{f.tie ? '=' : ''}</span>
-              </span>
-            ))}
-          </div>
-
-          <div className="grid flex-1 grid-cols-2 items-start px-6">
-            {([0, 1] as const).map(spot => (
-              <Spot key={spot} side="mine" index={mat.mine[spot]} mat={mat} sets={sets} selected={selected}
-                onSelect={setSelected} onDrop={onDropSpot('mine', spot)} offset={spot * 23} />
-            ))}
-          </div>
-
-          {/* Sticky notes float over the field */}
-          {mat.notes.map(n => (
-            <Note key={n.id} note={n} onChange={(p, key) => updateNote(n.id, p, key)} onDelete={() => set({notes: mat.notes.filter(x => x.id !== n.id)})} />
+      <div className="relative flex flex-1 flex-col" onClick={() => { setSelected(null); setPanel(null); }}>
+        <div className="grid flex-1 grid-cols-2 items-end px-6">
+          {([0, 1] as const).map(spot => (
+            <Spot key={spot} side="theirs" index={mat.theirs[spot]} mat={mat} sets={sets} selected={selected}
+              onSelect={setSelected} onDrop={onDropSpot('theirs', spot)} offset={spot * 17} />
           ))}
         </div>
 
-        <Bench side="mine" ids={sets.map((_, i) => i)} mat={mat} sets={sets} selected={selected} onSelect={setSelected}
-          onDrop={onDropBench('mine')} onToggleBrought={toggleBrought} />
-      </section>
+        {/* Turn order across the middle */}
+        <div className="mx-6 my-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-y border-dashed border-white/10 py-2 text-[12px]">
+          <span className="label mr-1">{mat.field.trickRoom ? 'Order (Trick Room)' : 'Order'}</span>
+          {order.map((f, k) => (
+            <span key={f.key} className="flex items-center gap-1">
+              {k > 0 && <span className="text-faint">›</span>}
+              <span className={f.side === 'mine' ? 'text-info' : 'text-bad'}>{f.set.species}</span>
+              <span className="num text-faint">{f.speed}{f.tie ? '=' : ''}</span>
+            </span>
+          ))}
+        </div>
 
-      {/* Right: selected Pokémon */}
-      <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-        {sel ? (
+        <div className="grid flex-1 grid-cols-2 items-start px-6">
+          {([0, 1] as const).map(spot => (
+            <Spot key={spot} side="mine" index={mat.mine[spot]} mat={mat} sets={sets} selected={selected}
+              onSelect={setSelected} onDrop={onDropSpot('mine', spot)} offset={spot * 23} />
+          ))}
+        </div>
+
+        {/* Sticky notes float over the field */}
+        {mat.notes.map(n => (
+          <Note key={n.id} note={n} onChange={(p, key) => updateNote(n.id, p, key)} onDelete={() => set({notes: mat.notes.filter(x => x.id !== n.id)})} />
+        ))}
+      </div>
+
+      <Bench side="mine" ids={sets.map((_, i) => i)} mat={mat} sets={sets} selected={selected} onSelect={setSelected}
+        onDrop={onDropBench('mine')} onToggleBrought={toggleBrought} />
+
+      {/* Floating cards */}
+      {panel === 'suggest' && best && (
+        <Floating side="left" title="Suggested" onClose={() => setPanel(null)}>
+          <div className="text-[12.5px]">
+            <div><span className="text-dim">Lead</span> {best.lead.map(i => sets[i].species).join(' + ')}</div>
+            <div><span className="text-dim">Back</span> {best.bring.filter(i => !best.lead.includes(i)).map(i => sets[i].species).join(' · ')}</div>
+            <ul className="mt-1.5 space-y-0.5 text-[11.5px] text-dim">{best.reasons.slice(0, 4).map(r => <li key={r}>✓ {r}</li>)}</ul>
+            {best.warnings.length > 0 && <ul className="mt-1 space-y-0.5 text-[11.5px] text-warn">{best.warnings.slice(0, 3).map(w => <li key={w}>! {w}</li>)}</ul>}
+            <button className="btn mt-2 !py-1 text-xs" onClick={() => set({mine: [best.lead[0], best.lead[1]], brought: best.bring})}>Put on the mat</button>
+          </div>
+          {advice.length > 0 && (
+            <div className="mt-3 border-t border-line pt-2">
+              <div className="label mb-1">If they lead …</div>
+              <ul className="space-y-0.5 text-[12px]">
+                {advice.map(a => (
+                  <li key={a.pair.join()}>
+                    <button className="w-full rounded-md px-1.5 py-1 text-left hover:bg-panel-2" title="Put these leads on the mat"
+                      onClick={() => set({theirs: [a.pair[0], a.pair[1]], mine: [a.lead[0], a.lead[1]]})}>
+                      <span className="text-dim">{a.pair.map(j => mat.opp[j].species).join(' + ')}</span>
+                      <span className="num ml-1 text-[10px] text-faint">{pct(a.p, 0)}</span>
+                      <span className={`block ${a.same ? 'text-good' : 'text-gold'}`}>→ {a.names.join(' + ')}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Floating>
+      )}
+      {panel === 'help' && (
+        <Floating side="left" title="How it works" onClose={() => setPanel(null)}>
+          <ul className="space-y-1.5 text-[12.5px] text-dim">
+            <li>Drag Pokémon from the benches onto the four spots.</li>
+            <li>Click one to see its calcs against the other side, set HP and stat stages.</li>
+            <li>Toggle weather, terrain, Tailwind, Trick Room and screens in the bar on top.</li>
+            <li>Add notes and drag them anywhere on the field.</li>
+            <li>The dot under your bench Pokémon marks the four you bring.</li>
+          </ul>
+        </Floating>
+      )}
+      {sel && (
+        <Floating side="right" title="Calcs" onClose={() => setSelected(null)}>
           <Inspector mat={mat} me={sel} foes={fighters.filter(f => f.side !== sel.side)}
             onHp={v => set({hp: {...mat.hp, [sel.key]: v}}, `hp-${sel.key}`)}
             onBoost={(stat, v) => set({boosts: {...mat.boosts, [sel.key]: {...mat.boosts[sel.key], [stat]: v}}})} />
-        ) : (
-          <div className="panel p-4 text-[13px] text-dim">
-            <div className="label mb-2">How it works</div>
-            <ul className="space-y-1.5">
-              <li>Drag Pokémon from the benches onto the four spots.</li>
-              <li>Click one to see its calcs against the other side, set HP and stat stages.</li>
-              <li>Toggle weather, terrain, Tailwind, Trick Room and screens in the bar above the mat.</li>
-              <li>Add notes and drag them anywhere on the field.</li>
-              <li>The dot under your bench Pokémon marks the four you bring.</li>
-            </ul>
-          </div>
-        )}
-      </aside>
+        </Floating>
+      )}
+      </div>
+    </section>
+  );
+}
+
+/** A card floating over the mat, below the toolbar. */
+function Floating({side, title, onClose, children}: {side: 'left' | 'right'; title: string; onClose: () => void; children: React.ReactNode}) {
+  return (
+    <div onClick={e => e.stopPropagation()}
+      className={`rise absolute top-3 z-30 flex max-h-[calc(100%-24px)] w-[340px] flex-col rounded-xl border border-line-2 bg-panel/95 shadow-2xl shadow-black/50 backdrop-blur ${side === 'left' ? 'left-3' : 'right-3'}`}>
+      <div className="flex items-center justify-between border-b border-line px-3 py-2">
+        <span className="label">{title}</span>
+        <button className="text-faint hover:text-ink" onClick={onClose} aria-label="Close">✕</button>
+      </div>
+      <div className="min-h-0 overflow-y-auto p-3">{children}</div>
     </div>
   );
 }
@@ -192,7 +207,15 @@ function fighterByKey(mat: Playmat, sets: PokemonSet[], key: string): Fighter | 
   return s ? {side, index, set: s, key} : null;
 }
 
-function Toolbar({field, onField, onNote}: {field: MatField; onField: (p: Partial<MatField>) => void; onNote: () => void}) {
+function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel}: {
+  name: string;
+  field: MatField;
+  onField: (p: Partial<MatField>) => void;
+  onNote: () => void;
+  onChangeOpponent: () => void;
+  panel: 'suggest' | 'help' | null;
+  onPanel: (p: 'suggest' | 'help') => void;
+}) {
   const chip = (on: boolean) => `rounded-md border px-2 py-0.5 text-[11.5px] transition ${on ? 'border-gold bg-gold/15 text-gold' : 'border-white/10 text-dim hover:text-ink'}`;
   const sideToggle = (label: string, key: 'tailwind' | 'reflect' | 'lightScreen') => (
     <span className="flex items-center gap-1">
@@ -206,6 +229,12 @@ function Toolbar({field, onField, onNote}: {field: MatField; onField: (p: Partia
   );
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-white/5 bg-black/25 px-4 py-2 text-[12px]">
+      <span className="flex items-center gap-2">
+        <span className="font-display text-[14px] font-semibold">vs {name}</span>
+        <button className="text-[11.5px] text-faint underline hover:text-ink" onClick={onChangeOpponent}>change</button>
+      </span>
+      <button className={chip(panel === 'suggest')} onClick={() => onPanel('suggest')}>Suggest</button>
+      <span className="h-4 w-px bg-white/10" />
       <select className="field !w-auto !py-0.5 text-xs" value={field.weather} onChange={e => onField({weather: e.target.value as MatField['weather']})}>
         {(['', 'Rain', 'Sun', 'Sand', 'Snow'] as const).map(w => <option key={w} value={w}>{WEATHER_LABEL[w]}</option>)}
       </select>
@@ -216,7 +245,10 @@ function Toolbar({field, onField, onNote}: {field: MatField; onField: (p: Partia
       {sideToggle('Tailwind', 'tailwind')}
       {sideToggle('Reflect', 'reflect')}
       {sideToggle('Light Screen', 'lightScreen')}
-      <button className="btn ml-auto !py-0.5 text-xs" onClick={onNote}>+ Note</button>
+      <span className="ml-auto flex items-center gap-2">
+        <button className="btn !py-0.5 text-xs" onClick={onNote}>+ Note</button>
+        <button className={chip(panel === 'help')} onClick={() => onPanel('help')} aria-label="How it works">?</button>
+      </span>
     </div>
   );
 }
