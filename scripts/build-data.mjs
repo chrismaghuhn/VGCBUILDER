@@ -275,6 +275,7 @@ async function main() {
   }
 
   await buildPortraits(species);
+  await extendShareDict(species, items, moves);
 
   const write = (name, data) => writeFile(join(OUT, name), JSON.stringify(data));
   await write('format.json', {...FORMAT, month, sources: SOURCES.filter(s => usage[s.key]).map(s => ({key: s.key, label: s.label})), builtAt: new Date().toISOString()});
@@ -283,6 +284,28 @@ async function main() {
   await write('moves.json', moves);
   await write('usage.json', usage);
   console.log('Wrote data to', OUT);
+}
+
+/**
+ * Dictionary for short share links: names are stored as indices into these lists. The lists are
+ * append-only (never reordered or shortened) so links made today keep decoding after data
+ * updates. Index 0 is reserved for "none".
+ */
+async function extendShareDict(species, items, moves) {
+  const path = join(ROOT, 'src', 'data', 'share-dict.json');
+  const dict = existsSync(path)
+    ? JSON.parse(await readFile(path, 'utf8'))
+    : {species: [''], items: [''], abilities: [''], moves: ['']};
+  const add = (list, names) => {
+    const known = new Set(list);
+    for (const n of [...names].sort()) if (!known.has(n)) list.push(n);
+  };
+  add(dict.species, Object.keys(species).filter(n => !species[n].mega));
+  add(dict.items, items.map(i => i.name));
+  add(dict.abilities, new Set(Object.values(species).flatMap(s => s.abilities)));
+  add(dict.moves, Object.keys(moves));
+  await writeFile(path, JSON.stringify(dict, null, 0) + '\n');
+  console.log('Share dict:', Object.entries(dict).map(([k, v]) => `${k} ${v.length - 1}`).join(', '));
 }
 
 // Showdown forme suffix -> SpriteCollab subgroup name.

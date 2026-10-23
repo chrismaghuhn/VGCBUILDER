@@ -9,6 +9,8 @@ import {CalcView, makeSide, type Side} from './components/CalcView';
 import {MetaView} from './components/MetaView';
 import {OffenseView} from './components/OffenseView';
 import {PasteDialog} from './components/PasteDialog';
+import {Portrait} from './components/ui';
+import {decodeShare, sharePayload} from './lib/share';
 import {Picker} from './components/Picker';
 import {SearchView} from './components/SearchView';
 import {SetEditor} from './components/SetEditor';
@@ -47,6 +49,8 @@ export default function App() {
   const [planSel, setPlanSel] = useState(0);
   const planning = page === 'offense' || page === 'speed' || page === 'bulk';
   const [dialog, setDialog] = useState<'import' | 'export' | null>(null);
+  // A team received via share link (#share=…), waiting for the user to import it.
+  const [shared, setShared] = useState<{name: string; sets: PokemonSet[]; warnings: string[]} | {error: string} | null>(null);
   const [calcPair, setCalcPair] = useState<[Side, Side] | null>(null);
   const [weatherPref, setWeatherPref] = useState<WeatherPref>('auto');
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,11 +63,14 @@ export default function App() {
     window.scrollTo({top: 0});
   };
   useEffect(() => {
-    // Ignore hashes we don't know instead of falling back to Build.
+    // Ignore hashes we don't know instead of falling back to Build; share links open a preview.
     const onHash = () => {
       const h = location.hash.slice(1);
       if (PAGES.some(p => p.key === h)) setPageState(h as Page);
+      const payload = sharePayload(h);
+      if (payload) decodeShare(payload).then(setShared, e => setShared({error: (e as Error).message}));
     };
+    onHash();
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -222,13 +229,22 @@ export default function App() {
         Portraits: <a className="underline hover:text-dim" href="https://github.com/PMDCollab/SpriteCollab" target="_blank" rel="noreferrer">PMD SpriteCollab</a> (CC BY-NC 4.0)
       </footer>
 
+      {shared && (
+        <SharedDialog
+          shared={shared}
+          onClose={() => { setShared(null); history.replaceState(null, '', `${location.pathname}#bauen`); setPageState('bauen'); }}
+          onImport={(name, imported) => { store.create(imported, name); setSelected(0); }}
+        />
+      )}
+
       {dialog && (
         <PasteDialog
           mode={dialog}
           sets={sets}
+          teamName={team.name}
           onClose={() => setDialog(null)}
-          onImport={(imported, asNew) => {
-            if (asNew) store.create(imported, 'Imported Team');
+          onImport={(imported, asNew, name) => {
+            if (asNew) store.create(imported, name ?? 'Imported Team');
             else setSets(() => imported);
             setSelected(0);
             setDialog(null);
@@ -268,5 +284,44 @@ function CheckBar({sets, errors, onClick}: {sets: PokemonSet[]; errors: number; 
       ))}
       {chips.length > 5 && <span className="px-1 text-[11.5px] text-dim">+{chips.length - 5}</span>}
     </button>
+  );
+}
+
+/** Preview of a team opened from a share link. */
+function SharedDialog({shared, onImport, onClose}: {
+  shared: {name: string; sets: PokemonSet[]; warnings: string[]} | {error: string};
+  onImport: (name: string, sets: PokemonSet[]) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+      <div className="panel rise w-full max-w-lg p-5" onMouseDown={e => e.stopPropagation()}>
+        {'error' in shared ? (
+          <>
+            <h2 className="font-display text-lg font-semibold uppercase tracking-wider">Share link</h2>
+            <p className="mt-2 text-[13px] text-bad">This link couldn't be read: {shared.error}</p>
+            <div className="mt-4 flex justify-end"><button className="btn" onClick={onClose}>Close</button></div>
+          </>
+        ) : (
+          <>
+            <div className="label">Shared team</div>
+            <h2 className="font-display text-xl font-semibold">{shared.name}</h2>
+            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {shared.sets.map((s, i) => (
+                <div key={i} className="flex flex-col items-center gap-1 text-center">
+                  <Portrait name={battleForme(s)} size={48} />
+                  <span className="w-full truncate text-[11px] text-dim">{s.species}</span>
+                </div>
+              ))}
+            </div>
+            {shared.warnings.length > 0 && <p className="mt-2 text-[12px] text-warn">{shared.warnings.join(' · ')}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="btn" onClick={onClose}>Dismiss</button>
+              <button className="btn btn-gold" onClick={() => { onImport(shared.name, shared.sets); onClose(); }}>Import as new team</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
