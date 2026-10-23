@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
 import {decodeShare, encodeShare, fetchPokepaste, pokepasteId, sharePayload, shareUrl, uploadPokepaste} from '../lib/share';
+import {otsTeam} from '../lib/ots';
 import {exportTeam, importTeam, type PokemonSet} from '../lib/team';
 
 export function PasteDialog({mode, sets, teamName, onImport, onClose}: {
@@ -10,6 +11,7 @@ export function PasteDialog({mode, sets, teamName, onImport, onClose}: {
   onClose: () => void;
 }) {
   const [text, setText] = useState(mode === 'export' ? exportTeam(sets) : '');
+  const [format, setFormat] = useState<'showdown' | 'ots'>('showdown');
   const [copied, setCopied] = useState<'text' | 'link' | null>(null);
   const [status, setStatus] = useState<{tone: 'dim' | 'good' | 'bad'; msg: string} | null>(null);
   const [importName, setImportName] = useState<string | undefined>();
@@ -68,6 +70,17 @@ export function PasteDialog({mode, sets, teamName, onImport, onClose}: {
           </h2>
           <button className="text-dim hover:text-ink" onClick={onClose}>✕</button>
         </div>
+        {mode === 'export' && (
+          <div className="mb-2 flex gap-2">
+            {([['showdown', 'Showdown'], ['ots', 'Open Team Sheet']] as const).map(([f, label]) => (
+              <button key={f} className={`btn ${format === f ? 'btn-gold' : ''}`} onClick={() => {
+                setFormat(f);
+                setText(f === 'ots' ? otsTeam(sets) : exportTeam(sets));
+                setCopied(null);
+              }}>{label}</button>
+            ))}
+          </div>
+        )}
         <textarea
           className="field num h-[360px] resize-none text-[12.5px] leading-relaxed"
           value={text}
@@ -98,7 +111,7 @@ export function PasteDialog({mode, sets, teamName, onImport, onClose}: {
                 <button className="btn" onClick={() => uploadPokepaste(teamName, text)} title="Opens the new paste in a new tab">
                   Upload to PokePaste ↗
                 </button>
-                <button className="btn btn-gold" onClick={() => copy('link')}>{copied === 'link' ? '✓ Link copied' : 'Copy share link'}</button>
+                {format === 'showdown' && <button className="btn btn-gold" onClick={() => copy('link')}>{copied === 'link' ? '✓ Link copied' : 'Copy share link'}</button>}
               </>
             ) : (
               <>
