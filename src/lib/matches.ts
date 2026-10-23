@@ -1,6 +1,6 @@
 import {SPECIES, type UsageSource} from './data';
 import {teamField} from './analysis';
-import {metaSet} from './calc';
+import {metaSet} from './meta';
 import type {ParsedReplay, PSide} from './replay';
 import type {PokemonSet} from './team';
 

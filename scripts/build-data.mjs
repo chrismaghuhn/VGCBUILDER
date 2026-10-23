@@ -299,11 +299,17 @@ async function main() {
   validate({species, items, moves, usage});
 
   const write = (name, data) => writeFile(join(OUT, name), JSON.stringify(data));
+  // Type chart for the site's own type maths, so it doesn't need the calc library at startup.
+  const typeChart = {};
+  for (const t of gen.types) if (t.name !== '???' && t.name !== 'Stellar') typeChart[t.name] = Object.fromEntries(Object.entries(t.effectiveness).filter(([d, m]) => d !== '???' && d !== 'Stellar' && m !== 1));
+  await write('types.json', typeChart);
   await write('format.json', {...FORMAT, month, sources: SOURCES.filter(s => usage[s.key]).map(s => ({key: s.key, label: s.label})), builtAt: new Date().toISOString()});
   await write('species.json', species);
   await write('items.json', items);
   await write('moves.json', moves);
-  await write('usage.json', usage);
+  // One file per source: the site loads only the one in use.
+  for (const [key, src] of Object.entries(usage)) await write(`usage-${key}.json`, src);
+  await rm(join(OUT, 'usage.json'), {force: true});
   console.log('Wrote data to', OUT);
 }
 

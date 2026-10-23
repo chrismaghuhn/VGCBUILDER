@@ -1,13 +1,14 @@
-import {Generations} from '@smogon/calc';
+import typesJson from '../data/generated/types.json';
 import {MOVES, SPECIES, TYPES, type UsageSource} from './data';
 import {battleForme, parseSpread, calcStat, setStats, type PokemonSet} from './team';
 
-const GEN = Generations.get(0);
+/** Attacking type → defending type → multiplier (only entries that aren't 1×); built from the calc's Champions data. */
+const TYPE_CHART = typesJson as Record<string, Record<string, number>>;
 
 export function typeEffect(attack: string, defTypes: string[]): number {
-  const t = GEN.types.get(attack.toLowerCase() as never);
+  const t = TYPE_CHART[attack];
   if (!t) return 1;
-  return defTypes.reduce((m, d) => m * ((t.effectiveness as Record<string, number>)[d] ?? 1), 1);
+  return defTypes.reduce((m, d) => m * (t[d] ?? 1), 1);
 }
 
 /** Ability-aware incoming multiplier. */

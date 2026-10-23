@@ -1,6 +1,6 @@
 import {useDeferredValue, useMemo, useState} from 'react';
 import {MOVES, SPECIES, STAT_LABEL, TYPE_COLOR, pct, type UsageSource} from '../lib/data';
-import {metaSet} from '../lib/calc';
+import {metaSet} from '../lib/meta';
 import {CONCEPTS, NOT_IN_FORMAT, QUICK_CONCEPTS, parseQuery, queryMoves, search, suggestTerms, type Term} from '../lib/search';
 import type {PokemonSet} from '../lib/team';
 import {Portrait, Section, TypeBadge} from './ui';

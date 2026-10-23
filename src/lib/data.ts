@@ -2,7 +2,6 @@ import formatJson from '../data/generated/format.json';
 import itemsJson from '../data/generated/items.json';
 import movesJson from '../data/generated/moves.json';
 import speciesJson from '../data/generated/species.json';
-import usageJson from '../data/generated/usage.json';
 
 export const STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'] as const;
 export type StatID = (typeof STATS)[number];
@@ -75,7 +74,25 @@ export const FORMAT = formatJson as {
 export const SPECIES = speciesJson as unknown as Record<string, SpeciesData>;
 export const MOVES = movesJson as unknown as Record<string, MoveData>;
 export const ITEMS = itemsJson as ItemData[];
-export const USAGE = usageJson as unknown as Record<string, UsageSource>;
+
+// Usage stats come one file per source (≈150–400 kB each) and are loaded when first needed.
+const usageFiles = import.meta.glob<{default: unknown}>('../data/generated/usage-*.json');
+const usageCache = new Map<string, Promise<UsageSource>>();
+
+/** The usage stats of one source (falls back to the first source for unknown keys). */
+export function loadUsage(key: string): Promise<UsageSource> {
+  const k = FORMAT.sources.some(s => s.key === key) ? key : FORMAT.sources[0].key;
+  let p = usageCache.get(k);
+  if (!p) {
+    const file = usageFiles[`../data/generated/usage-${k}.json`];
+    if (!file) return Promise.reject(new Error(`No usage data for ${k}`));
+    p = file().then(m => m.default as UsageSource);
+    // A failed load (offline) may be retried later.
+    p.catch(() => usageCache.delete(k));
+    usageCache.set(k, p);
+  }
+  return p;
+}
 
 export const ITEM_NAMES = ITEMS.map(i => i.name).sort();
 const ITEM_BY_NAME = new Map(ITEMS.map(i => [i.name, i]));

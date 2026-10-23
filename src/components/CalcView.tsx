@@ -1,24 +1,12 @@
 import {useMemo, useState} from 'react';
 import {ITEM_NAMES, MOVES, NATURE_NAMES, SP_MAX, SPECIES, STAT_LABEL, STATS, TYPE_COLOR, type UsageSource} from '../lib/data';
-import {metaSet, runCalc, type Boosts, type FieldOpts} from '../lib/calc';
+import {metaSet, runCalc, type FieldOpts} from '../lib/calc';
 import {battleForme, setStats, type Opponent, type PokemonSet} from '../lib/team';
+import {makeSide, type Side} from './calcSide';
 import {speciesOptions} from './SetEditor';
 import {Combobox, EstBadge, Portrait, Section, TypeBadge, dmgColor} from './ui';
 
-export interface Side {
-  set: PokemonSet;
-  boosts: Boosts;
-  hp: number;
-  helpingHand: boolean;
-  reflect: boolean;
-  lightScreen: boolean;
-  auroraVeil: boolean;
-  friendGuard: boolean;
-}
-
-export const makeSide = (set: PokemonSet): Side => ({
-  set, boosts: {}, hp: 100, helpingHand: false, reflect: false, lightScreen: false, auroraVeil: false, friendGuard: false,
-});
+export {makeSide, type Side} from './calcSide';
 
 export function CalcView({
   sets, usage, opp, pair, setPair,
