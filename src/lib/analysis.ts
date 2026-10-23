@@ -114,16 +114,16 @@ interface RoleDef {
 }
 
 export const ROLES: RoleDef[] = [
-  {key: 'fakeout', label: 'Fake Out', hint: 'Freie Züge, stört Setup und Trick Room.', moves: ['Fake Out'], important: true},
+  {key: 'fakeout', label: 'Fake Out', hint: 'Free turns; disrupts setup and Trick Room.', moves: ['Fake Out'], important: true},
   {key: 'speed', label: 'Speed Control', hint: 'Tailwind, Trick Room, Icy Wind, Electroweb, Thunder Wave …', moves: ['Tailwind', 'Trick Room', 'Icy Wind', 'Electroweb', 'Thunder Wave', 'Scary Face', 'Bulldoze', 'Rock Tomb', 'Nuzzle', 'Glare', 'String Shot', 'Low Sweep'], important: true},
-  {key: 'redirect', label: 'Redirection', hint: 'Follow Me / Rage Powder schützt Setup-Mons.', moves: ['Follow Me', 'Rage Powder'], abilities: ['Lightning Rod', 'Storm Drain']},
-  {key: 'intimidate', label: 'Atk-Drop', hint: 'Schwächt physische Angreifer.', abilities: ['Intimidate'], moves: ['Parting Shot', 'Charm', 'Feather Dance', 'Lunge', 'Breaking Swipe', 'Noble Roar', 'Tickle', 'Play Nice'], important: true},
-  {key: 'spadrop', label: 'SpA-Drop', hint: 'Snarl, Eerie Impulse: schwächt spezielle Angreifer.', moves: ['Snarl', 'Eerie Impulse', 'Parting Shot', 'Noble Roar', 'Confide', 'Mystical Fire', 'Spirit Break', 'Struggle Bug', 'Skitter Smack']},
-  {key: 'protect', label: 'Protect', hint: 'Mind. 4 Mons mit Protect/Detect sind Standard.', moves: ['Protect', 'Detect', 'Spiky Shield', "King's Shield", 'Baneful Bunker', 'Silk Trap', 'Burning Bulwark', 'Obstruct']},
-  {key: 'spread', label: 'Spread-Damage', hint: 'Trifft beide Gegner.'},
+  {key: 'redirect', label: 'Redirection', hint: 'Follow Me / Rage Powder protect setup partners.', moves: ['Follow Me', 'Rage Powder'], abilities: ['Lightning Rod', 'Storm Drain']},
+  {key: 'intimidate', label: 'Atk-Drop', hint: 'Weakens physical attackers.', abilities: ['Intimidate'], moves: ['Parting Shot', 'Charm', 'Feather Dance', 'Lunge', 'Breaking Swipe', 'Noble Roar', 'Tickle', 'Play Nice'], important: true},
+  {key: 'spadrop', label: 'SpA-Drop', hint: 'Snarl, Eerie Impulse: weakens special attackers.', moves: ['Snarl', 'Eerie Impulse', 'Parting Shot', 'Noble Roar', 'Confide', 'Mystical Fire', 'Spirit Break', 'Struggle Bug', 'Skitter Smack']},
+  {key: 'protect', label: 'Protect', hint: 'At least 4 Protect users is standard.', moves: ['Protect', 'Detect', 'Spiky Shield', "King's Shield", 'Baneful Bunker', 'Silk Trap', 'Burning Bulwark', 'Obstruct']},
+  {key: 'spread', label: 'Spread Damage', hint: 'Hits both opponents.'},
   {key: 'priority', label: 'Priority', hint: 'Sucker Punch, Extreme Speed, Grassy Glide …'},
-  {key: 'weather', label: 'Wetter / Terrain', hint: 'Setzt Sonne, Regen, Sand, Schnee oder Terrain.', abilities: ['Drought', 'Drizzle', 'Sand Stream', 'Snow Warning', 'Grassy Surge', 'Psychic Surge', 'Electric Surge', 'Misty Surge', 'Orichalcum Pulse', 'Hadron Engine', 'Mega Sol'], moves: ['Sunny Day', 'Rain Dance', 'Sandstorm', 'Snowscape']},
-  {key: 'guard', label: 'Wide/Quick Guard', hint: 'Blockt Spread-Moves bzw. Priority.', moves: ['Wide Guard', 'Quick Guard']},
+  {key: 'weather', label: 'Weather / Terrain', hint: 'Sets sun, rain, sand, snow or terrain.', abilities: ['Drought', 'Drizzle', 'Sand Stream', 'Snow Warning', 'Grassy Surge', 'Psychic Surge', 'Electric Surge', 'Misty Surge', 'Orichalcum Pulse', 'Hadron Engine', 'Mega Sol'], moves: ['Sunny Day', 'Rain Dance', 'Sandstorm', 'Snowscape']},
+  {key: 'guard', label: 'Wide/Quick Guard', hint: 'Blocks spread moves or priority.', moves: ['Wide Guard', 'Quick Guard']},
   {key: 'support', label: 'Support', hint: 'Helping Hand, Screens, Taunt, Encore, Will-O-Wisp …', moves: ['Helping Hand', 'Reflect', 'Light Screen', 'Aurora Veil', 'Taunt', 'Encore', 'Will-O-Wisp', 'Spore', 'Sleep Powder', 'Yawn', 'Disable', 'Imprison', 'Coaching', 'Decorate', 'Life Dew', 'Pollen Puff', 'Heal Pulse', 'Instruct', 'After You', 'Beat Up']},
 ];
 
@@ -145,7 +145,7 @@ export function roleCoverage(sets: PokemonSet[]): {role: RoleDef; members: strin
 // ---------------------------------------------------------------- Speed
 
 export type Weather = '' | 'Rain' | 'Sun' | 'Sand' | 'Snow';
-export const WEATHER_LABEL: Record<Weather, string> = {'': 'Kein Wetter', Rain: 'Regen', Sun: 'Sonne', Sand: 'Sand', Snow: 'Schnee'};
+export const WEATHER_LABEL: Record<Weather, string> = {'': 'No weather', Rain: 'Rain', Sun: 'Sun', Sand: 'Sand', Snow: 'Snow'};
 
 export interface SpeedField {
   weather: Weather;
@@ -157,7 +157,7 @@ export interface SpeedField {
 const WEATHER_SETTERS: Record<string, Weather> = {Drizzle: 'Rain', Drought: 'Sun', 'Sand Stream': 'Sand', 'Snow Warning': 'Snow'};
 const SPEED_WEATHER: Record<string, Weather> = {'Swift Swim': 'Rain', Chlorophyll: 'Sun', 'Sand Rush': 'Sand', 'Slush Rush': 'Snow'};
 /** Situational speed abilities: shown as a note, not applied. */
-const SPEED_NOTES: Record<string, string> = {Unburden: 'Unburden ×2 nach Item', 'Speed Boost': 'Speed Boost +1/Runde', 'Quick Feet': 'Quick Feet ×1.5 mit Status'};
+const SPEED_NOTES: Record<string, string> = {Unburden: 'Unburden ×2 after item', 'Speed Boost': 'Speed Boost +1/turn', 'Quick Feet': 'Quick Feet ×1.5 when statused'};
 
 const abilityOf = (set: PokemonSet) => {
   const forme = SPECIES[battleForme(set)];
@@ -254,16 +254,16 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
     const top = Math.floor(speeds[0] * mod.mult);
     const max = Math.floor(Math.max(...speeds) * mod.mult);
     const notes: string[] = [];
-    if (max !== top) notes.push(`bis ${max}`);
+    if (max !== top) notes.push(`up to ${max}`);
     const scarf = u.items.find(([i]) => i === 'Choice Scarf');
     if (scarf && scarf[1] > 0.1) notes.push(`Scarf ${pct(scarf[1])}: ${Math.floor(top * 1.5)}`);
     // A speed ability that is not the main one, or whose weather is not up right now.
     for (const [a, p] of u.abilities) {
       const w = SPEED_WEATHER[a];
-      if (w && (weather !== w || a !== ability) && p > 0.15) notes.push(`${a} ${pct(p)}: ${Math.floor(speeds[0] * 2)} in ${WEATHER_LABEL[w]}`);
+      if (w && (weather !== w || a !== ability) && p > 0.15) notes.push(`${a} ${pct(p)}: ${Math.floor(speeds[0] * 2)} in ${WEATHER_LABEL[w].toLowerCase()}`);
       if (SPEED_NOTES[a] && p > 0.15) notes.push(SPEED_NOTES[a]);
     }
-    if (own && mod.label) notes.unshift(`${WEATHER_LABEL[own.weather]} von ${own.source === name ? 'sich selbst' : own.source}`);
+    if (own && mod.label) notes.unshift(`${WEATHER_LABEL[own.weather]} from ${own.source === name ? 'itself' : own.source}`);
     out.push({name, speed: top, mine: false, usage: u.usage, boosts: mod.label ? [mod.label] : [], note: notes.join(' · ')});
   }
   return out;

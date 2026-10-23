@@ -38,7 +38,7 @@ export function MetaView({sets, usage, onCalc, weather}: {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[1fr_1.3fr]">
-        <Section title="Metagame" right={<span className="num text-xs text-dim">{usage.battles.toLocaleString('de-DE')} Kämpfe · {usage.month}</span>}>
+        <Section title="Metagame" right={<span className="num text-xs text-dim">{usage.battles.toLocaleString('en-US')} battles · {usage.month}</span>}>
           <div className="space-y-2">
             {ARCHETYPES.map(([key, label, color]) => (
               <div key={key} className="grid grid-cols-[90px_1fr_52px] items-center gap-3">
@@ -49,7 +49,7 @@ export function MetaView({sets, usage, onCalc, weather}: {
             ))}
           </div>
         </Section>
-        <Section title="Häufigste Leads">
+        <Section title="Top Leads">
           <div className="grid grid-cols-2 gap-x-5 gap-y-1.5 2xl:grid-cols-3">
             {leads.map(([name, u], i) => (
               <div key={name} className="flex items-center gap-2">
@@ -64,16 +64,16 @@ export function MetaView({sets, usage, onCalc, weather}: {
       </div>
 
       {!sets.length ? (
-        <Empty text="Noch keine Pokémon im Team." />
+        <Empty />
       ) : (
         <Section
-          title="Threat-Matrix"
+          title="Threat Matrix"
           right={
             <div className="flex items-center gap-2 text-xs">
               <WeatherControls state={weather} auto={auto.weather} />
               <select className="field !w-auto !py-1 text-xs" value={sort} onChange={e => setSort(e.target.value as 'danger' | 'usage')}>
-                <option value="danger">Nach Gefahr</option>
-                <option value="usage">Nach Usage</option>
+                <option value="danger">By danger</option>
+                <option value="usage">By usage</option>
               </select>
               <select className="field !w-auto !py-1 text-xs" value={limit} onChange={e => setLimit(+e.target.value)}>
                 {[20, 30, 50].map(n => <option key={n} value={n}>Top {n}</option>)}
@@ -82,17 +82,17 @@ export function MetaView({sets, usage, onCalc, weather}: {
           }
         >
           <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-lg border border-line bg-bg/40 px-3 py-2 text-[12px]">
-            <span className="flex items-center gap-1.5"><span className="num rounded bg-good/15 px-1 font-bold text-good">2HKO</span> du → Threat</span>
-            <span className="flex items-center gap-1.5"><span className="num rounded bg-bad/15 px-1 font-bold text-bad">1HKO</span> Threat → du</span>
-            <span><span className="text-good">▲</span> du bist schneller · <span className="text-faint">▼</span> langsamer · <span className="text-warn">=</span> Tie</span>
-            <span className="text-dim">— 4+ Treffer</span>
+            <span className="flex items-center gap-1.5"><span className="num rounded bg-good/15 px-1 font-bold text-good">2HKO</span> you → threat</span>
+            <span className="flex items-center gap-1.5"><span className="num rounded bg-bad/15 px-1 font-bold text-bad">1HKO</span> threat → you</span>
+            <span><span className="text-good">▲</span> you outspeed · <span className="text-faint">▼</span> slower · <span className="text-warn">=</span> tie</span>
+            <span className="text-dim">— 4+ hits</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-separate border-spacing-y-1 text-[12px]">
               <thead>
                 <tr className="text-left">
                   <th className="label pb-1 pl-2 text-[10px]">Threat</th>
-                  <th className="label pb-1 text-[10px]">Gefahr</th>
+                  <th className="label pb-1 text-[10px]">Danger</th>
                   {sets.map((s, i) => (
                     <th key={i} className="pb-1 text-center"><Portrait name={battleForme(s)} size={30} className="mx-auto" /></th>
                   ))}
@@ -112,7 +112,7 @@ export function MetaView({sets, usage, onCalc, weather}: {
                               {row.weather && (
                                 <WeatherChip
                                   weather={row.weather.weather}
-                                  title={row.weather.source === row.threat.name ? 'setzt es selbst' : `${row.weather.source} in ${Math.round(row.weather.share * 100)}% der Teams`}
+                                  title={row.weather.source === row.threat.name ? 'sets it itself' : `${row.weather.source} on ${Math.round(row.weather.share * 100)}% of its teams`}
                                 />
                               )}
                             </div>
@@ -176,10 +176,10 @@ function KoChip({hit, mine}: {hit?: HitSummary; mine: boolean}) {
 }
 
 function Cell({cell, last}: {cell: MatchupCell; last: boolean}) {
-  const fmt = (h?: HitSummary) => (h ? `${h.move}: ${Math.round(h.minPct * 100)}–${Math.round(h.maxPct * 100)}% (${h.koText || 'kein KO'})` : '—');
-  const speed = cell.faster === null ? 'Speed Tie' : cell.faster ? 'Du bist schneller' : 'Er ist schneller';
+  const fmt = (h?: HitSummary) => (h ? `${h.move}: ${Math.round(h.minPct * 100)}–${Math.round(h.maxPct * 100)}% (${h.koText || 'no KO'})` : '—');
+  const speed = cell.faster === null ? 'Speed tie' : cell.faster ? 'You outspeed' : 'Threat outspeeds you';
   return (
-    <td className={`px-0.5 py-1 text-center ${last ? 'rounded-r-lg' : ''}`} title={`Du → Threat: ${fmt(cell.out)}\nThreat → Du: ${fmt(cell.in)}\n${speed}`}>
+    <td className={`px-0.5 py-1 text-center ${last ? 'rounded-r-lg' : ''}`} title={`You → threat: ${fmt(cell.out)}\nThreat → you: ${fmt(cell.in)}\n${speed}`}>
       <div className="mx-auto flex w-[86px] flex-col gap-0.5 rounded-md bg-bg/60 p-0.5">
         <div className="flex items-center gap-0.5">
           <span className={`w-3 text-[9px] ${cell.faster ? 'text-good' : cell.faster === null ? 'text-warn' : 'text-faint'}`}>
@@ -211,25 +211,25 @@ function ThreatDetail({threat, usage, sets, cells, onCalc}: {threat: MetaThreat;
         </div>
         <div className="space-y-0.5 text-[12.5px]">
           <div><span className="text-dim">Spread:</span> {threat.set.nature} · {STATS.filter(s => threat.set.sps[s]).map(s => `${threat.set.sps[s]} ${STAT_LABEL[s]}`).join(' / ')}</div>
-          <div><span className="text-dim">Fähigkeit:</span> {u?.abilities.map(([a, p]) => `${a} ${pct(p, 0)}`).join(', ')}</div>
+          <div><span className="text-dim">Ability:</span> {u?.abilities.map(([a, p]) => `${a} ${pct(p, 0)}`).join(', ')}</div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 text-[12px]">
         <UsageList title="Items" list={u?.items.slice(0, 5) ?? []} />
-        <UsageList title="Attacken" list={u?.moves.slice(0, 7) ?? []} />
+        <UsageList title="Moves" list={u?.moves.slice(0, 7) ?? []} />
       </div>
       <div className="text-[12px]">
-        <div className="label mb-1.5">Gegen dein Team</div>
+        <div className="label mb-1.5">Vs. your team</div>
         <div className="space-y-1">
           {sets.map((s, i) => (
             <div key={i} className="flex items-center gap-2">
               <Portrait name={battleForme(s)} size={20} className="!rounded" />
               <span className="w-24 truncate">{s.species}</span>
-              <button className="text-left text-dim hover:text-gold" onClick={() => onCalc(s, threat.set)} title="Im Calc öffnen">
+              <button className="text-left text-dim hover:text-gold" onClick={() => onCalc(s, threat.set)} title="Open in calc">
                 {cells[i].out ? `${cells[i].out!.move} ${Math.round(cells[i].out!.minPct * 100)}–${Math.round(cells[i].out!.maxPct * 100)}% · ${koLabel(cells[i].out).text}` : '—'}
               </button>
               <span className="text-faint">/</span>
-              <button className="text-left hover:text-gold" style={{color: dmgColor(cells[i].in?.maxPct ?? 0)}} onClick={() => onCalc(threat.set, s)} title="Im Calc öffnen">
+              <button className="text-left hover:text-gold" style={{color: dmgColor(cells[i].in?.maxPct ?? 0)}} onClick={() => onCalc(threat.set, s)} title="Open in calc">
                 {cells[i].in ? `${cells[i].in!.move} ${Math.round(cells[i].in!.minPct * 100)}–${Math.round(cells[i].in!.maxPct * 100)}% · ${koLabel(cells[i].in).text}` : '—'}
               </button>
             </div>

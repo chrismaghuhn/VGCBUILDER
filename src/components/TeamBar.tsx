@@ -51,7 +51,7 @@ export function TeamBar({
             <button
               onClick={e => { e.stopPropagation(); onRemove(i); }}
               className="absolute right-1.5 top-1.5 hidden h-5 w-5 items-center justify-center rounded text-faint hover:bg-bad/20 hover:text-bad group-hover:flex"
-              title="Entfernen"
+              title="Remove"
             >
               ×
             </button>
@@ -61,10 +61,10 @@ export function TeamBar({
                 <div className="flex items-center gap-1.5">
                   <span className="truncate font-display text-[15px] font-semibold leading-tight">{set.species}</span>
                   {sp?.mega && <span className="rounded bg-gold/15 px-1 font-display text-[9px] font-bold text-gold">MEGA</span>}
-                  {errors > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-bad" title={`${errors} Fehler`} />}
+                  {errors > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-bad" title={`${errors} error${errors > 1 ? 's' : ''}`} />}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1">{sp?.types.map(t => <TypeBadge key={t} type={t} small />)}</div>
-                <div className="mt-1 truncate text-xs text-dim">{set.item || <span className="text-faint">kein Item</span>}</div>
+                <div className="mt-1 truncate text-xs text-dim">{set.item || <span className="text-faint">no item</span>}</div>
               </div>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11.5px] text-ink/80">

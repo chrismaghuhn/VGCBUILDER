@@ -14,9 +14,9 @@ import {TeamBar} from './components/TeamBar';
 import type {WeatherPref, WeatherState} from './components/ui';
 
 const PAGES = [
-  {key: 'bauen', label: 'Bauen'},
-  {key: 'suche', label: 'Suche'},
-  {key: 'analyse', label: 'Analyse'},
+  {key: 'bauen', label: 'Build'},
+  {key: 'suche', label: 'Search'},
+  {key: 'analyse', label: 'Analysis'},
   {key: 'meta', label: 'Meta'},
   {key: 'calc', label: 'Calc'},
 ] as const;
@@ -106,7 +106,7 @@ export default function App() {
             className="rounded-lg border border-line bg-bg px-2 py-1 text-[12px] text-ink outline-none"
             value={store.source}
             onChange={e => store.setSource(e.target.value)}
-            title="Usage-Daten"
+            title="Usage data"
           >
             {FORMAT.sources.map(s => <option key={s.key} value={s.key}>{s.label} · {USAGE[s.key].month}</option>)}
           </select>
@@ -121,7 +121,7 @@ export default function App() {
               className="field !w-auto !py-1 text-xs text-dim"
               value=""
               onChange={e => { store.select(e.target.value); setSelected(0); }}
-              title="Team wechseln"
+              title="Switch team"
             >
               <option value="" disabled>Teams ({store.teams.length})</option>
               {store.teams.map(t => <option key={t.id} value={t.id}>{t.id === team.id ? '● ' : ''}{t.name}</option>)}
@@ -131,16 +131,16 @@ export default function App() {
             className="min-w-0 flex-1 bg-transparent px-1 font-display text-lg font-semibold tracking-wide outline-none placeholder:text-faint focus:text-gold"
             value={team.name}
             onChange={e => store.rename(e.target.value)}
-            aria-label="Teamname"
+            aria-label="Team name"
           />
           <CheckBar sets={sets} errors={errorCount} onClick={() => setPage('analyse')} />
           <div className="flex gap-1.5">
-            <button className="btn !px-2.5 !py-1 text-xs disabled:opacity-35" onClick={store.undo} disabled={!store.canUndo} title="Rückgängig (Strg+Z)">↶</button>
-            <button className="btn !py-1 text-xs" onClick={() => { store.create(); setSelected(0); setPage('bauen'); }}>+ Neu</button>
-            <button className="btn !py-1 text-xs" onClick={store.duplicate} title="Duplizieren">⧉</button>
+            <button className="btn !px-2.5 !py-1 text-xs disabled:opacity-35" onClick={store.undo} disabled={!store.canUndo} title="Undo (Ctrl+Z)">↶</button>
+            <button className="btn !py-1 text-xs" onClick={() => { store.create(); setSelected(0); setPage('bauen'); }}>+ New</button>
+            <button className="btn !py-1 text-xs" onClick={store.duplicate} title="Duplicate">⧉</button>
             <button className="btn !py-1 text-xs" onClick={() => setDialog('import')}>Import</button>
             <button className="btn btn-gold !py-1 text-xs" onClick={() => setDialog('export')} disabled={!sets.length}>Export</button>
-            <button className="btn !px-2.5 !py-1 text-xs hover:!border-bad/60 hover:!text-bad" onClick={() => { if (confirm(`"${team.name}" löschen?`)) store.remove(); }} title="Team löschen">🗑</button>
+            <button className="btn !px-2.5 !py-1 text-xs hover:!border-bad/60 hover:!text-bad" onClick={() => { if (confirm(`Delete "${team.name}"?`)) store.remove(); }} title="Delete team">🗑</button>
           </div>
         </div>
         <TeamBar
@@ -187,7 +187,7 @@ export default function App() {
 
       <footer className="mt-12 border-t border-line pt-4 text-[11.5px] text-faint">
         <a className="underline hover:text-dim" href="https://www.smogon.com/stats/" target="_blank" rel="noreferrer">Smogon</a> ({usage.label}, {usage.month}) ·
-        Showdown <code>champions</code>-Mod · @smogon/calc ·
+        Showdown <code>champions</code> mod · @smogon/calc ·
         Portraits: <a className="underline hover:text-dim" href="https://github.com/PMDCollab/SpriteCollab" target="_blank" rel="noreferrer">PMD SpriteCollab</a> (CC BY-NC 4.0)
       </footer>
 
@@ -197,7 +197,7 @@ export default function App() {
           sets={sets}
           onClose={() => setDialog(null)}
           onImport={(imported, asNew) => {
-            if (asNew) store.create(imported, 'Importiertes Team');
+            if (asNew) store.create(imported, 'Imported Team');
             else setSets(() => imported);
             setSelected(0);
             setDialog(null);
@@ -213,25 +213,25 @@ function CheckBar({sets, errors, onClick}: {sets: PokemonSet[]; errors: number; 
   const chips = useMemo(() => {
     if (!sets.length) return [];
     const out: {text: string; tone: 'bad' | 'warn' | 'good'}[] = [];
-    if (errors) out.push({text: `${errors} Fehler`, tone: 'bad'});
+    if (errors) out.push({text: `${errors} error${errors > 1 ? 's' : ''}`, tone: 'bad'});
     for (const {role, members} of roleCoverage(sets)) {
-      if (role.important && !members.length) out.push({text: `kein ${role.label}`, tone: 'warn'});
+      if (role.important && !members.length) out.push({text: `no ${role.label}`, tone: 'warn'});
     }
     for (const t of TYPES) {
       const m = sets.map(s => defensiveMult(s, t));
       const weak = m.filter(x => x > 1).length;
-      if (weak >= 3 || weak - m.filter(x => x < 1).length >= 2) out.push({text: `${weak}× schwach ${t}`, tone: 'warn'});
+      if (weak >= 3 || weak - m.filter(x => x < 1).length >= 2) out.push({text: `${weak}× weak to ${t}`, tone: 'warn'});
     }
     const megas = sets.filter(s => SPECIES[battleForme(s)]?.mega).length;
     if (megas > 2) out.push({text: `${megas} Megas`, tone: 'warn'});
-    if (!out.length && sets.length === 6) out.push({text: 'keine Probleme', tone: 'good'});
+    if (!out.length && sets.length === 6) out.push({text: 'no issues', tone: 'good'});
     return out;
   }, [sets, errors]);
 
   if (!chips.length) return null;
   const tone = {bad: 'border-bad/40 bg-bad/10 text-bad', warn: 'border-warn/30 bg-warn/10 text-warn', good: 'border-good/30 bg-good/10 text-good'};
   return (
-    <button onClick={onClick} className="flex flex-wrap gap-1.5" title="Zur Analyse">
+    <button onClick={onClick} className="flex flex-wrap gap-1.5" title="Go to analysis">
       {chips.slice(0, 5).map(c => (
         <span key={c.text} className={`rounded-md border px-2 py-0.5 text-[11.5px] ${tone[c.tone]}`}>{c.text}</span>
       ))}

@@ -54,28 +54,28 @@ export function CalcView({
           <Results title={`${a.set.species} → ${b.set.species}`} rows={results(a, b)} />
           <Results title={`${b.set.species} → ${a.set.species}`} rows={results(b, a)} />
           <div className="flex justify-center">
-            <button className="btn text-xs" onClick={() => setPair([b, a])}>⇄ Seiten tauschen</button>
+            <button className="btn text-xs" onClick={() => setPair([b, a])}>⇄ Swap sides</button>
           </div>
         </div>
         <SidePanel label="Pokémon B" side={b} onChange={s => update(1, s)} sets={sets} usage={usage} />
       </div>
 
-      <Section title="Feld">
+      <Section title="Field">
         <div className="flex flex-wrap items-end gap-4">
           <label className="block">
-            <div className="label mb-1">Wetter</div>
+            <div className="label mb-1">Weather</div>
             <select className="field !w-36" value={field.weather} onChange={e => setField({...field, weather: e.target.value as FieldOpts['weather']})}>
-              {['', 'Sun', 'Rain', 'Sand', 'Snow'].map(w => <option key={w} value={w}>{w || 'Keins'}</option>)}
+              {['', 'Sun', 'Rain', 'Sand', 'Snow'].map(w => <option key={w} value={w}>{w || 'None'}</option>)}
             </select>
           </label>
           <label className="block">
             <div className="label mb-1">Terrain</div>
             <select className="field !w-36" value={field.terrain} onChange={e => setField({...field, terrain: e.target.value as FieldOpts['terrain']})}>
-              {['', 'Electric', 'Grassy', 'Psychic', 'Misty'].map(w => <option key={w} value={w}>{w || 'Keins'}</option>)}
+              {['', 'Electric', 'Grassy', 'Psychic', 'Misty'].map(w => <option key={w} value={w}>{w || 'None'}</option>)}
             </select>
           </label>
-          <Toggle label="Volltreffer" value={!!field.crit} onChange={v => setField({...field, crit: v})} />
-          <Toggle label="Spread nur 1 Ziel" value={!!field.singleTarget} onChange={v => setField({...field, singleTarget: v})} />
+          <Toggle label="Critical hit" value={!!field.crit} onChange={v => setField({...field, crit: v})} />
+          <Toggle label="Spread: single target" value={!!field.singleTarget} onChange={v => setField({...field, singleTarget: v})} />
         </div>
       </Section>
     </div>
@@ -87,7 +87,7 @@ function Results({title, rows}: {title: string; rows: {move: string; out: Return
   return (
     <Section title={title}>
       <div className="space-y-1.5">
-        {rows.length === 0 && <div className="text-dim">Keine Attacken.</div>}
+        {rows.length === 0 && <div className="text-dim">No moves.</div>}
         {rows.map(({move, out}) => {
           const mv = MOVES[move];
           const p = out?.maxPct ?? 0;
@@ -163,13 +163,13 @@ function SidePanel({label, side, onChange, sets, usage}: {label: string; side: S
           <Combobox value={set.item} options={[{value: ''}, ...ITEM_NAMES.map(i => ({value: i}))]} onChange={item => upd({item})} />
         </div>
         <div>
-          <div className="label mb-1">Fähigkeit</div>
+          <div className="label mb-1">Ability</div>
           <select className="field" value={sp?.mega ? sp.abilities[0] : set.ability} disabled={!!sp?.mega} onChange={e => upd({ability: e.target.value})}>
             {(sp?.mega ? sp.abilities : SPECIES[set.species]?.abilities ?? []).map(a => <option key={a}>{a}</option>)}
           </select>
         </div>
         <div>
-          <div className="label mb-1">Wesen</div>
+          <div className="label mb-1">Nature</div>
           <select className="field" value={set.nature} onChange={e => upd({nature: e.target.value})}>
             {NATURE_NAMES.map(n => <option key={n}>{n}</option>)}
           </select>
@@ -186,7 +186,7 @@ function SidePanel({label, side, onChange, sets, usage}: {label: string; side: S
             <th className="text-left font-normal" />
             <th className="font-normal">SP</th>
             <th className="font-normal">Boost</th>
-            <th className="text-right font-normal">Wert</th>
+            <th className="text-right font-normal">Stat</th>
           </tr>
         </thead>
         <tbody>
@@ -212,7 +212,7 @@ function SidePanel({label, side, onChange, sets, usage}: {label: string; side: S
       </table>
 
       <div className="mt-3">
-        <div className="label mb-1">Attacken</div>
+        <div className="label mb-1">Moves</div>
         <div className="grid grid-cols-2 gap-1.5">
           {[0, 1, 2, 3].map(k => (
             <Combobox key={k} value={set.moves[k] ?? ''}

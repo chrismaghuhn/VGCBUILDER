@@ -18,16 +18,16 @@ export interface WeatherState {
 export function WeatherControls({state, auto}: {state: WeatherState; auto: Weather}) {
   return (
     <>
-      <select className="field !w-auto !py-1 text-xs" value={state.pref} onChange={e => state.setPref(e.target.value as WeatherPref)} title="Wetter">
+      <select className="field !w-auto !py-1 text-xs" value={state.pref} onChange={e => state.setPref(e.target.value as WeatherPref)} title="Weather">
         <option value="auto">Auto · {WEATHER_LABEL[auto]}</option>
         {(Object.keys(WEATHER_LABEL) as Weather[]).map(w => <option key={w} value={w}>{WEATHER_LABEL[w]}</option>)}
       </select>
       <button
         className={`btn !py-1 text-xs ${state.enemy ? '!border-warn !bg-warn/15 text-warn' : ''}`}
         onClick={() => state.setEnemy(!state.enemy)}
-        title="Threats spielen mit dem Wetter ihres Teams (Sand, Sonne, Regen, Schnee)"
+        title="Threats play under the weather their team usually brings (rain, sun, sand, snow)"
       >
-        Gegner-Wetter {state.enemy ? 'an' : 'aus'}
+        Enemy weather {state.enemy ? 'on' : 'off'}
       </button>
     </>
   );
@@ -150,7 +150,7 @@ export function Combobox({
       />
       {open && (
         <div ref={listRef} className="absolute z-40 mt-1 max-h-72 w-full min-w-[220px] overflow-auto rounded-lg border border-line-2 bg-panel shadow-2xl shadow-black/50">
-          {filtered.length === 0 && <div className="px-3 py-2 text-dim">Nichts gefunden</div>}
+          {filtered.length === 0 && <div className="px-3 py-2 text-dim">No results</div>}
           {filtered.map((o, i) => {
             const showGroup = o.group && (i === 0 || filtered[i - 1].group !== o.group);
             return (

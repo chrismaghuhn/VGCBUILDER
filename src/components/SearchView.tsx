@@ -80,7 +80,7 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
         <div className="relative">
           <input
             className="field !py-3 !pl-4 text-[16px]"
-            placeholder="Suche: speed control, pivot feuer, close combat, intimidate | fake out …"
+            placeholder="Search: speed control, pivot fire, close combat, tw hh, intimidate | fake out …"
             value={query}
             autoFocus
             onChange={e => { setQuery(e.target.value); setShown(PAGE); }}
@@ -88,7 +88,7 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
             onBlur={() => setTimeout(() => setFocused(false), 120)}
           />
           {query && (
-            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-ink" onClick={() => setQuery('')} title="Leeren">✕</button>
+            <button className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-ink" onClick={() => setQuery('')} title="Clear">✕</button>
           )}
           {suggestions.length > 0 && (
             <div className="absolute z-30 mt-1 w-full max-w-md rounded-lg border border-line-2 bg-panel p-1 shadow-2xl shadow-black/50">
@@ -135,17 +135,17 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
         <span className="font-display text-[15px] font-semibold uppercase tracking-wider">{hits.length} Pokémon</span>
         <div className="ml-auto flex items-center gap-2 text-xs">
           <button className={`btn !py-1 text-xs ${playedOnly ? '!border-gold !bg-gold/15 text-gold' : ''}`} onClick={() => setPlayedOnly(m => !m)}
-            title="Nur Mons, die den gesuchten Move bzw. die Fähigkeit in der Meta wirklich spielen">
-            Gespielt
+            title="Only Pokémon that actually run the matched move, ability or item in the meta">
+            Played
           </button>
           <button className={`btn !py-1 text-xs ${metaOnly ? '!border-gold !bg-gold/15 text-gold' : ''}`} onClick={() => setMetaOnly(m => !m)}>
-            Nur Meta
+            Meta only
           </button>
           <select className="field !w-auto !py-1 text-xs" value={sort} onChange={e => setSort(e.target.value as Sort)}>
-            <option value="relevance">Nach Relevanz</option>
-            <option value="usage">Nach Usage</option>
-            <option value="spe">Nach Speed</option>
-            <option value="name">Nach Name</option>
+            <option value="relevance">By relevance</option>
+            <option value="usage">By usage</option>
+            <option value="spe">By speed</option>
+            <option value="name">By name</option>
           </select>
         </div>
       </div>
@@ -205,7 +205,7 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
               <button
                 className="btn h-fit shrink-0 !px-2 !py-1 text-xs disabled:cursor-not-allowed disabled:opacity-35"
                 disabled={full || taken}
-                title={taken ? 'Schon im Team' : full ? 'Team voll' : 'Mit Meta-Set ins Team'}
+                title={taken ? 'Already in team' : full ? 'Team is full' : 'Add with meta set'}
                 onClick={() => onAdd(metaSet(h.name, usage, takenItems))}
               >
                 + Team
@@ -216,7 +216,7 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
       </div>
       {hits.length > shown && (
         <div className="flex justify-center">
-          <button className="btn" onClick={() => setShown(s => s + PAGE)}>Mehr anzeigen ({hits.length - shown})</button>
+          <button className="btn" onClick={() => setShown(s => s + PAGE)}>Show more ({hits.length - shown})</button>
         </div>
       )}
     </div>
@@ -227,18 +227,18 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
 function TermLine({groups}: {groups: Term[][]}) {
   if (!groups.length) return null;
   const color: Record<Term['kind'], string> = {concept: 'text-gold', type: 'text-info', move: 'text-good', ability: 'text-[#c78cff]', item: 'text-warn', text: 'text-dim'};
-  const label = (t: Term) => t.kind === 'concept' ? t.concept.label : t.kind === 'type' ? t.type : t.kind === 'move' ? t.move : t.kind === 'ability' ? t.ability : t.kind === 'item' ? `@ ${t.item}` : `„${t.text}“`;
+  const label = (t: Term) => t.kind === 'concept' ? t.concept.label : t.kind === 'type' ? t.type : t.kind === 'move' ? t.move : t.kind === 'ability' ? t.ability : t.kind === 'item' ? `@ ${t.item}` : `"${t.text}"`;
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
       {groups.map((g, gi) => (
         <span key={gi} className="flex flex-wrap items-center gap-1.5">
-          {gi > 0 && <span className="text-faint">oder</span>}
+          {gi > 0 && <span className="text-faint">or</span>}
           {g.map((t, ti) => (
             <span key={ti} className="flex items-center gap-1.5">
               {ti > 0 && <span className="text-faint">+</span>}
               <span className={color[t.kind]}>{label(t)}</span>
               {t.kind === 'text' && NOT_IN_FORMAT.has(t.text) && (
-                <span className="text-bad">({NOT_IN_FORMAT.get(t.text)}: nicht in Reg M-C)</span>
+                <span className="text-bad">({NOT_IN_FORMAT.get(t.text)}: not in Reg M-C)</span>
               )}
             </span>
           ))}

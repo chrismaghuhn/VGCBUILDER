@@ -37,10 +37,10 @@ export const CONCEPTS: Concept[] = [
   {key: 'helping', label: 'Helping Hand', aliases: ['helping hand', 'helpinghand'], moves: ['Helping Hand'], abilities: []},
   {key: 'spread', label: 'Spread', aliases: ['spread', 'spread move', 'spread moves'], moves: allMoves.filter(m => MOVES[m].cat !== 'Status' && SPREAD_TARGETS.includes(MOVES[m].target)), abilities: []},
   {key: 'priority', label: 'Priority', aliases: ['priority', 'prio', 'priorität'], moves: allMoves.filter(m => (MOVES[m].prio ?? 0) > 0 && MOVES[m].cat !== 'Status').concat('Grassy Glide'), abilities: ['Prankster', 'Gale Wings']},
-  {key: 'rain', label: 'Regen', aliases: ['regen', 'rain'], moves: ['Rain Dance'], abilities: ['Drizzle', 'Swift Swim', 'Rain Dish', 'Hydration', 'Dry Skin']},
-  {key: 'sun', label: 'Sonne', aliases: ['sonne', 'sun'], moves: ['Sunny Day'], abilities: ['Drought', 'Chlorophyll', 'Solar Power', 'Mega Sol', 'Harvest', 'Leaf Guard', 'Flower Gift']},
+  {key: 'rain', label: 'Rain', aliases: ['regen', 'rain'], moves: ['Rain Dance'], abilities: ['Drizzle', 'Swift Swim', 'Rain Dish', 'Hydration', 'Dry Skin']},
+  {key: 'sun', label: 'Sun', aliases: ['sonne', 'sun'], moves: ['Sunny Day'], abilities: ['Drought', 'Chlorophyll', 'Solar Power', 'Mega Sol', 'Harvest', 'Leaf Guard', 'Flower Gift']},
   {key: 'sand', label: 'Sand', aliases: ['sand', 'sandstorm', 'sandsturm'], moves: ['Sandstorm'], abilities: ['Sand Stream', 'Sand Rush', 'Sand Force', 'Sand Veil']},
-  {key: 'snow', label: 'Schnee', aliases: ['schnee', 'snow', 'hail', 'hagel'], moves: ['Snowscape', 'Aurora Veil'], abilities: ['Snow Warning', 'Slush Rush', 'Ice Body', 'Snow Cloak']},
+  {key: 'snow', label: 'Snow', aliases: ['schnee', 'snow', 'hail', 'hagel'], moves: ['Snowscape', 'Aurora Veil'], abilities: ['Snow Warning', 'Slush Rush', 'Ice Body', 'Snow Cloak']},
   {key: 'terrain', label: 'Terrain', aliases: ['terrain', 'feld'], moves: ['Grassy Terrain', 'Psychic Terrain', 'Electric Terrain', 'Misty Terrain'], abilities: ['Grassy Surge', 'Psychic Surge', 'Electric Surge', 'Misty Surge']},
 ].map(c => ({...c, items: [] as string[], aliases: [...c.aliases, ...(EXTRA_ALIASES[c.key] ?? [])]}));
 
@@ -222,10 +222,10 @@ export function suggestTerms(q: string, limit = 8): {label: string; kind: string
     const add = (label: string, kind: string) => {
       if (out.length < limit && !out.some(o => o.label === label)) out.push({label, kind, insert: frag});
     };
-    for (const c of CONCEPTS) if (c.aliases.some(a => norm(a).startsWith(frag))) add(c.label, 'Konzept');
-    for (const [alias, t] of Object.entries(TYPE_ALIASES)) if (alias.startsWith(frag)) add(t, 'Typ');
+    for (const c of CONCEPTS) if (c.aliases.some(a => norm(a).startsWith(frag))) add(c.label, 'Concept');
+    for (const [alias, t] of Object.entries(TYPE_ALIASES)) if (alias.startsWith(frag)) add(t, 'Type');
     for (const [k, m] of MOVE_BY_NORM) if (k.startsWith(frag)) add(m, 'Move');
-    for (const [k, a] of ABILITY_BY_NORM) if (k.startsWith(frag)) add(a, 'Fähigkeit');
+    for (const [k, a] of ABILITY_BY_NORM) if (k.startsWith(frag)) add(a, 'Ability');
     for (const [k, i] of ITEM_BY_NORM) if (k.startsWith(frag)) add(i, 'Item');
     if (out.length) break;
   }

@@ -15,7 +15,7 @@ interface Saved {
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-export const newTeam = (name = 'Neues Team'): Team => ({id: newId(), name, sets: []});
+export const newTeam = (name = 'New Team'): Team => ({id: newId(), name, sets: []});
 
 function load(): Saved {
   try {
@@ -25,7 +25,7 @@ function load(): Saved {
       if (s.teams?.length) return {...s, source: FORMAT.sources.some(x => x.key === s.source) ? s.source : FORMAT.sources[0].key};
     }
   } catch { /* storage unavailable */ }
-  const t = newTeam('Mein M-C Team');
+  const t = newTeam('My M-C Team');
   return {teams: [t], activeId: t.id, source: FORMAT.sources[0].key};
 }
 
@@ -92,12 +92,12 @@ export function useStore() {
       commit(s => ({...s, teams: [...s.teams, t], activeId: t.id}));
     },
     duplicate: () => {
-      const t = {...team, id: newId(), name: team.name + ' (Kopie)', sets: structuredClone(team.sets)};
+      const t = {...team, id: newId(), name: team.name + ' (copy)', sets: structuredClone(team.sets)};
       commit(s => ({...s, teams: [...s.teams, t], activeId: t.id}));
     },
     remove: () => commit(s => {
       const teams = s.teams.filter(t => t.id !== s.activeId);
-      const rest = teams.length ? teams : [newTeam('Mein M-C Team')];
+      const rest = teams.length ? teams : [newTeam('My M-C Team')];
       return {...s, teams: rest, activeId: rest[0].id};
     }),
   };

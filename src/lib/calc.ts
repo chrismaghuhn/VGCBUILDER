@@ -260,7 +260,7 @@ export function suggestTeammates(sets: PokemonSet[], usage: UsageSource, problem
     if (sets.length) {
       synergy /= sets.length;
       score += synergy * 4;
-      if (synergy > 0.15) reasons.push(`Häufiger Partner · ${Math.round(synergy * 100)}%`);
+      if (synergy > 0.15) reasons.push(`Common partner · ${Math.round(synergy * 100)}%`);
     }
 
     // Patch shared weaknesses.
@@ -273,7 +273,7 @@ export function suggestTeammates(sets: PokemonSet[], usage: UsageSource, problem
       if (m < 1) { score += 0.9; patched.push(viaAbility ? `${t} (${fakeSet.ability})` : t); }
       else if (m > 1) score -= 0.7;
     }
-    if (patched.length) reasons.push(`Resistiert ${patched.join(', ')}`);
+    if (patched.length) reasons.push(`Resists ${patched.join(', ')}`);
 
     // Fill important missing roles via its common moves/abilities.
     const common = u.moves.filter(([, p]) => p > 0.25).map(([m]) => m);
@@ -299,12 +299,12 @@ export function suggestTeammates(sets: PokemonSet[], usage: UsageSource, problem
         }
         if (answered.length) {
           score += answered.length * 0.8;
-          reasons.push(`Antwort auf ${answered.slice(0, 3).join(', ')}`);
+          reasons.push(`Answers ${answered.slice(0, 3).join(', ')}`);
         }
       }
     }
 
-    if (sp.mega && megaCount >= 2) { score -= 1; reasons.push('Schon 2+ Megas'); }
+    if (sp.mega && megaCount >= 2) { score -= 1; reasons.push('Already 2+ Megas'); }
     if (sp.requiredItem && takenItems.includes(sp.requiredItem)) continue;
     results.push({name, score, reasons, usage: u.usage});
   }
