@@ -1,0 +1,44 @@
+# Monthly: fetch the new Smogon usage stats and Showdown data, check them, and open a PR.
+# Fails (and GitHub mails the repo owner) when a source changed its format or the regulation moved on.
+name: Monthly data update
+
+on:
+  schedule:
+    - cron: '0 6 3 * *' # 3rd of every month, 06:00 UTC: Smogon publishes the previous month in the first days
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: data-update
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # No SpriteCollab checkout here: the script keeps the portraits and sprites in the repo.
+      - run: npm run data
+        env:
+          SPRITECOLLAB: /nonexistent
+      - run: npm run build
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: data/monthly-update
+          delete-branch: true
+          add-paths: |
+            src/data
+            public/portraits
+          commit-message: 'Data: monthly usage update'
+          title: 'Data: monthly usage update'
+          body: |
+            New Smogon usage stats and Showdown data, fetched by the monthly workflow.
+            The data check passed and the site builds. Merging deploys it.
+
+            🤖 Generated with [Claude Code](https://claude.com/claude-code)
