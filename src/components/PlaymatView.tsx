@@ -247,7 +247,14 @@ export function PlaymatView({sets, usage, mat, onChange}: {
           ))}
         </div>
 
-        <Arrows mat={mat} sets={sets} fighters={fighters} anchors={anchors} obstacles={obstacles} aim={aim} />
+        <Arrows mat={mat} sets={sets} fighters={fighters} anchors={anchors} obstacles={obstacles} aim={aim}
+          onLabel={(from, to, t) => {
+            const a = mat.actions?.[from];
+            if (!a) return;
+            const labels = {...a.labels};
+            if (t === null) delete labels[to]; else labels[to] = t;
+            set({actions: {...mat.actions, [from]: {...a, labels}}}, t === null ? undefined : `label-${from}-${to}`);
+          }} />
 
         {/* Sticky notes float over the field */}
         {mat.notes.map(n => (
@@ -294,7 +301,7 @@ export function PlaymatView({sets, usage, mat, onChange}: {
             <li>Click one to see its calcs against the other side, set HP and stat stages.</li>
             <li>Toggle weather, terrain, Tailwind, Trick Room and screens in the bar on top.</li>
             <li><b className="text-ink">1–4</b> picks a move for the left Pokémon, <b className="text-ink">Shift+1–4</b> for the right one, <b className="text-ink">Tab</b> switches to the other side.</li>
-            <li><b className="text-ink">Right-drag</b> from a Pokémon onto its target draws the attack with its damage. Spread moves aim themselves.</li>
+            <li><b className="text-ink">Right-drag</b> from a Pokémon onto its target draws the attack with its damage. Spread moves aim themselves. Drag a damage label along its arrow, double-click it to reset.</li>
             <li>Add notes and drag them anywhere on the field.</li>
             <li>The dot under your bench Pokémon marks the four you bring.</li>
           </ul>
@@ -775,9 +782,13 @@ function placeLabel(at: (t: number) => Point, w: number, h: number, taken: Rect[
 }
 
 /** The planned attacks as arrows, labelled with the move and its damage; plus the one being drawn. */
-function Arrows({mat, sets, fighters, anchors, obstacles, aim}: {
+function Arrows({mat, sets, fighters, anchors, obstacles, aim, onLabel}: {
   mat: Playmat; sets: PokemonSet[]; fighters: Fighter[]; anchors: Record<string, Point>; obstacles: Rect[]; aim: Aim | null;
+  /** Move a label along its arrow (t 0-1), or null to let it place itself again. */
+  onLabel: (from: string, to: string, t: number | null) => void;
 }) {
+  // While dragging, the label follows the cursor locally; the board is updated as it moves.
+  const [dragT, setDragT] = useState<{id: string; t: number} | null>(null);
   const byKey = Object.fromEntries(fighters.map(f => [f.key, f]));
   const targetsOf = (f: Fighter) => {
     const a = mat.actions?.[f.key];
@@ -786,7 +797,7 @@ function Arrows({mat, sets, fighters, anchors, obstacles, aim}: {
   };
   const aimed = Object.fromEntries(fighters.map(f => [f.key, targetsOf(f)]));
   const taken = [...obstacles];
-  const arrows: {id: string; color: string; d: string; mid: Point; move: string; out: ReturnType<typeof matCalc>}[] = [];
+  const arrows: {id: string; from: string; to: string; at: (t: number) => Point; color: string; d: string; mid: Point; move: string; out: ReturnType<typeof matCalc>}[] = [];
   for (const f of fighters) {
     const a = mat.actions?.[f.key];
     if (!a || !anchors[f.key]) continue;
@@ -799,11 +810,41 @@ function Arrows({mat, sets, fighters, anchors, obstacles, aim}: {
       const ko = out ? koLabel({move: a.move, minPct: out.minPct, maxPct: out.maxPct, koText: out.koText, koN: out.koN, koChance: out.koChance}) : null;
       const text = `${a.move}  ${out ? `${pct(out.minPct, 0)}–${pct(out.maxPct, 0)}  ${ko && ko.ko !== '—' ? ko.ko + (ko.chance ? ' ' + ko.chance : '') : ''}` : ''}`;
       const w = textWidth(text) + 16, h = 20;
-      const mid = placeLabel(at, w, h, taken);
+      const id = `${f.key}-${t}`;
+      const manual = dragT?.id === id ? dragT.t : a.labels?.[t];
+      const mid = manual !== undefined ? at(manual) : placeLabel(at, w, h, taken);
       taken.push({x: mid.x - w / 2, y: mid.y - h / 2, w, h});
-      arrows.push({id: `${f.key}-${t}`, color: ally ? ARROW.ally : ARROW[f.side], d, mid, move: a.move, out});
+      arrows.push({id, from: f.key, to: t, at, color: ally ? ARROW.ally : ARROW[f.side], d, mid, move: a.move, out});
     }
   }
+  /** Drag a label: it slides to the point of its arrow nearest to the cursor. */
+  const grabLabel = (e: React.PointerEvent, a: (typeof arrows)[number]) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const box = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+    const nearest = (ev: PointerEvent) => {
+      const x = ev.clientX - box.left, y = ev.clientY - box.top;
+      let best = 0.5, dist = Infinity;
+      for (let t = 0.08; t <= 0.92; t += 0.01) {
+        const p = a.at(t);
+        const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+        if (d < dist) { dist = d; best = t; }
+      }
+      return Math.round(best * 100) / 100;
+    };
+    let last: number | null = null;
+    const move = (ev: PointerEvent) => { last = nearest(ev); setDragT({id: a.id, t: last}); };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (last !== null) onLabel(a.from, a.to, last);
+      setDragT(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   const live = aim && anchors[aim.from] ? curve(anchors[aim.from], aim.over ? anchors[aim.over] : {x: aim.x, y: aim.y}, aim.over ? 34 : 0) : null;
   const liveColor = aim ? ARROW[byKey[aim.from]?.side ?? 'mine'] : '';
   return (
@@ -828,8 +869,11 @@ function Arrows({mat, sets, fighters, anchors, obstacles, aim}: {
       {arrows.map(a => {
         const ko = a.out ? koLabel({move: a.move, minPct: a.out.minPct, maxPct: a.out.maxPct, koText: a.out.koText, koN: a.out.koN, koChance: a.out.koChance}) : null;
         return (
-          <div key={a.id} className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md border bg-black/80 px-1.5 py-0.5 text-[11px] shadow-lg"
-            style={{left: a.mid.x, top: a.mid.y, borderColor: `${a.color}99`}} title={a.out?.desc}>
+          <div key={a.id} onPointerDown={e => grabLabel(e, a)} onClick={e => e.stopPropagation()}
+            onDoubleClick={e => { e.stopPropagation(); onLabel(a.from, a.to, null); }}
+            className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none select-none whitespace-nowrap rounded-md border bg-black/80 px-1.5 py-0.5 text-[11px] shadow-lg active:cursor-grabbing ${dragT?.id === a.id ? 'ring-1 ring-white/40' : ''}`}
+            style={{left: a.mid.x, top: a.mid.y, borderColor: `${a.color}99`}}
+            title={`${a.out?.desc ? a.out.desc + '\n' : ''}Drag along the arrow · double-click to reset`}>
             <span style={{color: a.color}}>{a.move}</span>
             {a.out && (
               <>

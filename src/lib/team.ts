@@ -67,6 +67,8 @@ export interface MatAction {
   move: string;
   /** Fighter keys it hits; empty = not aimed yet (or a move without a target). */
   targets: string[];
+  /** Label position along the arrow (0-1) per target, when the player moved it. */
+  labels?: Record<string, number>;
 }
 
 export const emptySps = (): StatTable => ({hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0});
