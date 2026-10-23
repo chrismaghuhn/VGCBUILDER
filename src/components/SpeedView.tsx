@@ -1,17 +1,19 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {STAT_LABEL, type UsageSource} from '../lib/data';
-import {effectiveSpeed, metaSpeeds, teamField, teamSpeeds, type SpeedEntry, type SpeedField} from '../lib/analysis';
+import {effectiveSpeed, metaSpeeds, oppSpeeds, teamField, teamSpeeds, type SpeedEntry, type SpeedField} from '../lib/analysis';
 import {applySpeed, speedNeed, type SpeedNeed} from '../lib/speed';
-import {battleForme, type PokemonSet} from '../lib/team';
+import {battleForme, type Opponent, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {PixelLock} from './icons';
 import {PlanBar} from './PlanBar';
-import {Portrait, Section, WeatherControls, type WeatherState} from './ui';
+import {EstBadge, Portrait, Section, WeatherControls, type WeatherState} from './ui';
 
-export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
+export function SpeedView({sets, usage, weather, opp, selected, onUpdateSet}: {
   sets: PokemonSet[];
   usage: UsageSource;
   weather: WeatherState;
+  /** Compare against this opponent team instead of the top meta. */
+  opp?: Opponent;
   /** Index into sets, picked via the team bar. */
   selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
@@ -35,10 +37,11 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
   const mySpeed = me ? effectiveSpeed(me, field, true).speed : undefined;
 
   const rows = useMemo(() => {
-    const all = [...teamSpeeds(sets, field), ...metaSpeeds(usage, limit, field, weather.enemy)]
+    const theirs = opp ? oppSpeeds(opp.sets, field, weather.enemy) : metaSpeeds(usage, limit, field, weather.enemy);
+    const all = [...teamSpeeds(sets, field), ...theirs]
       .map(r => ({...r, target: !r.mine && vsFastest && r.max ? r.max : r.speed}));
     return all.sort((a, b) => (trickRoom ? a.target - b.target : b.target - a.target) || (a.mine ? -1 : 1));
-  }, [sets, usage, limit, field.weather, field.electricTerrain, tailwind, enemyTailwind, myStage, enemyStage, myPara, enemyPara, weather.enemy, vsFastest, trickRoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sets, usage, opp, limit, field.weather, field.electricTerrain, tailwind, enemyTailwind, myStage, enemyStage, myPara, enemyPara, weather.enemy, vsFastest, trickRoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const needs = useMemo(() => {
     const m = new Map<string, SpeedNeed>();
@@ -80,19 +83,21 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
             <Toggle on={enemyTailwind} onClick={() => setEnemyTailwind(t => !t)} color="bad">Enemy Tailwind</Toggle>
             <Toggle on={trickRoom} onClick={() => setTrickRoom(t => !t)} color="tr">Trick Room</Toggle>
             <Toggle on={detailed} onClick={() => setDetailed(d => !d)} color="gold" title="Show bars and notes (spread range, Scarf share, weather abilities)">Details</Toggle>
+            {!opp && <>
             <Toggle on={vsFastest} onClick={() => setVsFastest(v => !v)} color="gold" title="Compare against the fastest common spread instead of the most common one">
               vs fastest spread
             </Toggle>
             <select className="field !w-auto !py-1 text-xs" value={limit} onChange={e => setLimit(+e.target.value)}>
               {[20, 40, 80].map(n => <option key={n} value={n}>Top {n} meta</option>)}
             </select>
+            </>}
           </div>
         }
       >
         {me && <PlanBar set={me} onChange={s => onUpdateSet(sel, s)} />}
         <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12.5px]">
           <StageControl label="You" stage={myStage} setStage={setMyStage} para={myPara} setPara={setMyPara} />
-          <StageControl label="Opponents" stage={enemyStage} setStage={setEnemyStage} para={enemyPara} setPara={setEnemyPara} />
+          <StageControl label={opp ? opp.name : 'Opponents'} stage={enemyStage} setStage={setEnemyStage} para={enemyPara} setPara={setEnemyPara} />
           <span className="text-faint">Icy Wind / Electroweb = −1</span>
         </div>
         {me && (
@@ -111,6 +116,7 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
               r={r}
               max={max}
               isMeta={!r.mine && myNames.has(r.name)}
+              isOpp={!!opp}
               isSelected={r.mine && me !== undefined && r.name === battleForme(me)}
               detailed={detailed}
               tie={!r.mine && mySpeed !== undefined && r.target === mySpeed}
@@ -126,12 +132,14 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
   );
 }
 
-function Row({r, max, isMeta, isSelected, need, trickRoom, onApply, me, detailed, tie}: {
+function Row({r, max, isMeta, isOpp, isSelected, need, trickRoom, onApply, me, detailed, tie}: {
   detailed: boolean;
   tie: boolean;
   r: SpeedEntry & {target: number};
   max: number;
   isMeta: boolean;
+  /** Their side is one opponent team, not the meta. */
+  isOpp: boolean;
   isSelected: boolean;
   need?: SpeedNeed;
   trickRoom: boolean;
@@ -143,7 +151,8 @@ function Row({r, max, isMeta, isSelected, need, trickRoom, onApply, me, detailed
       <Portrait name={r.name} size={22} className="!rounded" />
       <span className={`flex w-44 min-w-0 items-center gap-1.5 text-[13px] ${r.mine ? 'font-semibold' : ''}`}>
         <span className="truncate">{r.name}</span>
-        {isMeta && <span className="shrink-0 rounded bg-line px-1 text-[9.5px] font-semibold uppercase text-dim">Meta</span>}
+        {isMeta && <span className="shrink-0 rounded bg-line px-1 text-[9.5px] font-semibold uppercase text-dim">{isOpp ? 'Opp' : 'Meta'}</span>}
+        {r.estimated && <EstBadge />}
       </span>
       <span className="num w-9 text-right text-[13px] font-semibold">{r.target}</span>
       <span className={`w-3 text-[10px] ${r.boosts.some(isBoost) ? 'text-info' : 'text-warn'}`} title={r.boosts.join(', ')}>

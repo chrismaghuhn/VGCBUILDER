@@ -16,6 +16,8 @@ export interface PokemonSet {
   locked?: StatID[];
   /** On the Playmat: holds its Mega Stone but hasn't Mega Evolved (yet). */
   unevolved?: boolean;
+  /** Opponent sets: nature and SP were guessed from usage data, not known. */
+  estimated?: boolean;
 }
 
 export interface Team {
@@ -32,6 +34,14 @@ export interface Team {
   matches?: Match[];
   /** Every Playmat board of this team, newest first; the open one is mirrored here on every change. */
   boards?: SavedBoard[];
+}
+
+/** An opponent team the planning tabs can work against instead of the meta. */
+export interface Opponent {
+  /** The board it comes from. */
+  id: string;
+  name: string;
+  sets: PokemonSet[];
 }
 
 export interface SavedBoard {

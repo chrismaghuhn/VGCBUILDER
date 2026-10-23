@@ -1,9 +1,9 @@
 import {useDeferredValue, useMemo} from 'react';
 import {SPECIES, TYPE_COLOR, type UsageSource} from '../lib/data';
-import {defensiveMatrix, offensiveCoverage, roleCoverage, teamField, type SpeedField, type TypeRow} from '../lib/analysis';
-import {metaThreats, threatMatrix} from '../lib/calc';
-import {battleForme, type Issue, type PokemonSet} from '../lib/team';
-import {Portrait, Section, TypeBadge, type WeatherState} from './ui';
+import {defensiveMatrix, metaWeather, offensiveCoverage, oppWeather, roleCoverage, teamField, type SpeedField, type TypeRow} from '../lib/analysis';
+import {metaThreats, teamThreats, threatMatrix} from '../lib/calc';
+import {battleForme, type Issue, type Opponent, type PokemonSet} from '../lib/team';
+import {EstBadge, Portrait, Section, TypeBadge, type WeatherState} from './ui';
 
 const multLabel = (m: number) => (m === 0 ? '0' : m >= 4 ? '4×' : m >= 2 ? '2×' : m === 1.5 || m === 1.25 ? `${m}×` : m <= 0.25 ? '¼' : m < 1 ? '½' : '');
 const multStyle = (m: number) => {
@@ -14,11 +14,13 @@ const multStyle = (m: number) => {
   return {};
 };
 
-export function AnalysisView({sets, usage, issues, weather}: {
+export function AnalysisView({sets, usage, issues, weather, opp}: {
   sets: PokemonSet[];
   usage: UsageSource;
   issues: Issue[];
   weather: WeatherState;
+  /** Look for threats in this opponent team instead of the top 30. */
+  opp?: Opponent;
 }) {
   const auto = teamField(sets);
   const field: SpeedField = {weather: weather.pref === 'auto' ? auto.weather : weather.pref, electricTerrain: auto.electricTerrain};
@@ -31,7 +33,7 @@ export function AnalysisView({sets, usage, issues, weather}: {
 
   return (
     <div className="space-y-4">
-      <Summary sets={sets} usage={usage} issues={issues} matrix={matrix} roles={roles} megas={megas.length} field={field} enemyWeather={weather.enemy} />
+      <Summary sets={sets} usage={usage} opp={opp} issues={issues} matrix={matrix} roles={roles} megas={megas.length} field={field} enemyWeather={weather.enemy} />
 
       <div className="grid gap-4 2xl:grid-cols-[1.25fr_1fr]">
         <Section title="Defensive Type Chart">
@@ -116,7 +118,8 @@ export function Empty({text = 'No Pokémon in the team yet.'}: {text?: string}) 
   return <div className="panel p-10 text-center text-dim">{text}</div>;
 }
 
-function Summary({sets, usage, issues, matrix, roles, megas, field, enemyWeather}: {
+function Summary({sets, usage, opp, issues, matrix, roles, megas, field, enemyWeather}: {
+  opp?: Opponent;
   field: SpeedField;
   enemyWeather: boolean;
   sets: PokemonSet[];
@@ -128,9 +131,12 @@ function Summary({sets, usage, issues, matrix, roles, megas, field, enemyWeather
 }) {
   const deferred = useDeferredValue(sets);
   const threats = useMemo(() => {
-    const rows = threatMatrix(deferred, metaThreats(usage, 30), field, enemyWeather ? {usage} : undefined);
+    const theirs = opp ? oppWeather(opp.sets) : null;
+    const rows = opp
+      ? threatMatrix(deferred, teamThreats(opp.sets), field, enemyWeather ? () => theirs : undefined)
+      : threatMatrix(deferred, metaThreats(usage, 30), field, enemyWeather ? n => metaWeather(n, usage) : undefined);
     return rows.filter(r => r.danger >= 0.45).sort((a, b) => b.danger - a.danger).slice(0, 5);
-  }, [deferred, usage, field.weather, field.electricTerrain, enemyWeather]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [deferred, usage, opp, field.weather, field.electricTerrain, enemyWeather]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const errors = issues.filter(i => i.level === 'error');
   const warns = issues.filter(i => i.level === 'warn' && i.slot !== undefined);
@@ -139,7 +145,7 @@ function Summary({sets, usage, issues, matrix, roles, megas, field, enemyWeather
   const ok = !errors.length && !missing.length && !weak.length && !threats.length;
 
   return (
-    <Section title={ok ? 'No Issues' : 'Issues'}>
+    <Section title={`${ok ? 'No Issues' : 'Issues'}${opp ? ` · vs ${opp.name}` : ''}`}>
       <div className="grid gap-x-8 gap-y-3 md:grid-cols-2">
         {errors.length > 0 && (
           <Row label="Legality" tone="bad">{errors.map(e => e.text).join(' · ')}</Row>
@@ -154,14 +160,14 @@ function Summary({sets, usage, issues, matrix, roles, megas, field, enemyWeather
           <Row label="Threats" tone="warn">
             <span className="flex flex-wrap gap-2">
               {threats.map(t => (
-                <span key={t.threat.name} className="flex items-center gap-1"><Portrait name={t.threat.name} size={20} className="!rounded" />{t.threat.name}</span>
+                <span key={t.threat.name} className="flex items-center gap-1"><Portrait name={t.threat.name} size={20} className="!rounded" />{t.threat.name}{t.threat.set.estimated && <EstBadge />}</span>
               ))}
             </span>
           </Row>
         )}
         {warns.length > 0 && <Row label="Notes" tone="dim">{warns.map(w => w.text).join(' · ')}</Row>}
         {megas > 1 && <Row label="Megas" tone="dim">{megas}</Row>}
-        {ok && <div className="text-[13px] text-good">Legal, all key roles covered, no stacked weaknesses.</div>}
+        {ok && <div className="text-[13px] text-good">Legal, all key roles covered, no stacked weaknesses{opp ? `, nothing in ${opp.name} runs you over` : ''}.</div>}
       </div>
     </Section>
   );

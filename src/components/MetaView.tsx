@@ -1,19 +1,21 @@
 import {Fragment, useDeferredValue, useMemo, useState} from 'react';
 import {SPECIES, STAT_LABEL, STATS, pct, type UsageSource} from '../lib/data';
-import {metaThreats, threatMatrix, type HitSummary, type MatchupCell, type MetaThreat} from '../lib/calc';
-import {teamField, type SpeedField} from '../lib/analysis';
-import {battleForme, type PokemonSet} from '../lib/team';
+import {metaThreats, teamThreats, threatMatrix, type HitSummary, type MatchupCell, type MetaThreat} from '../lib/calc';
+import {metaWeather, oppWeather, teamField, type SpeedField} from '../lib/analysis';
+import {battleForme, type Opponent, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
-import {Bar, Portrait, Section, TypeBadge, WeatherChip, WeatherControls, dmgColor, type WeatherState} from './ui';
+import {Bar, EstBadge, Portrait, Section, TypeBadge, WeatherChip, WeatherControls, dmgColor, type WeatherState} from './ui';
 
 const ARCHETYPES: [string, string, string][] = [
   ['rain', 'Rain', '#3d8fe0'], ['sun', 'Sun', '#e8613a'], ['sand', 'Sand', '#b5a771'],
   ['hail', 'Snow', '#5ccfe6'], ['trickroom', 'Trick Room', '#c78cff'], ['tailwind', 'Tailwind', '#86a8e8'],
 ];
 
-export function MetaView({sets, usage, onCalc, weather}: {
+export function MetaView({sets, usage, opp, onCalc, weather}: {
   sets: PokemonSet[];
   usage: UsageSource;
+  /** Threat matrix against this opponent team instead of the top meta. */
+  opp?: Opponent;
   onCalc: (atk: PokemonSet, def: PokemonSet) => void;
   weather: WeatherState;
 }) {
@@ -22,13 +24,14 @@ export function MetaView({sets, usage, onCalc, weather}: {
   const [open, setOpen] = useState<string | null>(null);
   const deferredSets = useDeferredValue(sets);
 
-  const threats = useMemo(() => metaThreats(usage, limit), [usage, limit]);
+  const threats = useMemo(() => (opp ? teamThreats(opp.sets) : metaThreats(usage, limit)), [usage, limit, opp]);
   const auto = teamField(deferredSets);
   const field: SpeedField = {weather: weather.pref === 'auto' ? auto.weather : weather.pref, electricTerrain: auto.electricTerrain};
   const rows = useMemo(() => {
-    const r = threatMatrix(deferredSets, threats, field, weather.enemy ? {usage} : undefined);
+    const theirs = opp ? oppWeather(opp.sets) : null;
+    const r = threatMatrix(deferredSets, threats, field, weather.enemy ? (opp ? () => theirs : n => metaWeather(n, usage)) : undefined);
     return sort === 'danger' ? [...r].sort((a, b) => b.danger - a.danger) : r;
-  }, [deferredSets, threats, sort, field.weather, field.electricTerrain, weather.enemy, usage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [deferredSets, threats, opp, sort, field.weather, field.electricTerrain, weather.enemy, usage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const leads = useMemo(
     () => Object.entries(usage.mons).sort((a, b) => b[1].lead - a[1].lead).slice(0, 12),
@@ -67,17 +70,19 @@ export function MetaView({sets, usage, onCalc, weather}: {
         <Empty />
       ) : (
         <Section
-          title="Threat Matrix"
+          title={opp ? `Threat Matrix · vs ${opp.name}` : 'Threat Matrix'}
           right={
             <div className="flex items-center gap-2 text-xs">
               <WeatherControls state={weather} auto={auto.weather} />
               <select className="field !w-auto !py-1 text-xs" value={sort} onChange={e => setSort(e.target.value as 'danger' | 'usage')}>
                 <option value="danger">By danger</option>
-                <option value="usage">By usage</option>
+                <option value="usage">{opp ? 'Team order' : 'By usage'}</option>
               </select>
-              <select className="field !w-auto !py-1 text-xs" value={limit} onChange={e => setLimit(+e.target.value)}>
-                {[20, 30, 50].map(n => <option key={n} value={n}>Top {n}</option>)}
-              </select>
+              {!opp && (
+                <select className="field !w-auto !py-1 text-xs" value={limit} onChange={e => setLimit(+e.target.value)}>
+                  {[20, 30, 50].map(n => <option key={n} value={n}>Top {n}</option>)}
+                </select>
+              )}
             </div>
           }
         >
@@ -106,13 +111,13 @@ export function MetaView({sets, usage, onCalc, weather}: {
                         <div className="flex items-center gap-2">
                           <Portrait name={row.threat.name} size={30} className="!rounded" />
                           <div className="min-w-0">
-                            <div className="truncate font-medium">{row.threat.name}</div>
+                            <div className="flex items-center gap-1.5"><span className="truncate font-medium">{row.threat.name}</span>{row.threat.set.estimated && <EstBadge />}</div>
                             <div className="num flex items-center gap-1.5 text-[10.5px] text-faint">
-                              {pct(row.threat.usage)} · {row.threat.set.item}
+                              {opp ? row.threat.set.item || 'no item' : `${pct(row.threat.usage)} · ${row.threat.set.item}`}
                               {row.weather && (
                                 <WeatherChip
                                   weather={row.weather.weather}
-                                  title={row.weather.source === row.threat.name ? 'sets it itself' : `${row.weather.source} on ${Math.round(row.weather.share * 100)}% of its teams`}
+                                  title={row.weather.source === row.threat.name ? 'sets it itself' : opp ? `from ${row.weather.source}` : `${row.weather.source} on ${Math.round(row.weather.share * 100)}% of its teams`}
                                 />
                               )}
                             </div>
@@ -127,7 +132,7 @@ export function MetaView({sets, usage, onCalc, weather}: {
                     {open === row.threat.name && (
                       <tr>
                         <td colSpan={2 + sets.length} className="pb-2">
-                          <ThreatDetail threat={row.threat} usage={usage} sets={sets} cells={row.cells} onCalc={onCalc} />
+                          <ThreatDetail threat={row.threat} usage={usage} own={!!opp} sets={sets} cells={row.cells} onCalc={onCalc} />
                         </td>
                       </tr>
                     )}
@@ -196,7 +201,11 @@ function Cell({cell, last}: {cell: MatchupCell; last: boolean}) {
   );
 }
 
-function ThreatDetail({threat, usage, sets, cells, onCalc}: {threat: MetaThreat; usage: UsageSource; sets: PokemonSet[]; cells: MatchupCell[]; onCalc: (a: PokemonSet, d: PokemonSet) => void}) {
+function ThreatDetail({threat, usage, own, sets, cells, onCalc}: {
+  threat: MetaThreat; usage: UsageSource; sets: PokemonSet[]; cells: MatchupCell[]; onCalc: (a: PokemonSet, d: PokemonSet) => void;
+  /** The threat is an opponent's known set: show it instead of usage shares. */
+  own: boolean;
+}) {
   const u = usage.mons[threat.name];
   const sp = SPECIES[threat.name];
   return (
@@ -210,14 +219,26 @@ function ThreatDetail({threat, usage, sets, cells, onCalc}: {threat: MetaThreat;
           </div>
         </div>
         <div className="space-y-0.5 text-[12.5px]">
-          <div><span className="text-dim">Spread:</span> {threat.set.nature} · {STATS.filter(s => threat.set.sps[s]).map(s => `${threat.set.sps[s]} ${STAT_LABEL[s]}`).join(' / ')}</div>
-          <div><span className="text-dim">Ability:</span> {u?.abilities.map(([a, p]) => `${a} ${pct(p, 0)}`).join(', ')}</div>
+          <div className="flex items-center gap-1.5">
+            <span><span className="text-dim">Spread:</span> {threat.set.nature} · {STATS.filter(s => threat.set.sps[s]).map(s => `${threat.set.sps[s]} ${STAT_LABEL[s]}`).join(' / ')}</span>
+            {threat.set.estimated && <EstBadge />}
+          </div>
+          {own
+            ? <div><span className="text-dim">Ability:</span> {sp?.mega ? sp.abilities[0] : threat.set.ability}</div>
+            : <div><span className="text-dim">Ability:</span> {u?.abilities.map(([a, p]) => `${a} ${pct(p, 0)}`).join(', ')}</div>}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 text-[12px]">
-        <UsageList title="Items" list={u?.items.slice(0, 5) ?? []} />
-        <UsageList title="Moves" list={u?.moves.slice(0, 7) ?? []} />
-      </div>
+      {own ? (
+        <div className="grid grid-cols-2 gap-3 text-[12px]">
+          <div><div className="label mb-1">Item</div>{threat.set.item || <span className="text-faint">none</span>}</div>
+          <div><div className="label mb-1">Moves</div>{threat.set.moves.filter(Boolean).map(m => <div key={m} className="truncate">{m}</div>)}</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 text-[12px]">
+          <UsageList title="Items" list={u?.items.slice(0, 5) ?? []} />
+          <UsageList title="Moves" list={u?.moves.slice(0, 7) ?? []} />
+        </div>
+      )}
       <div className="text-[12px]">
         <div className="label mb-1.5">Vs. your team</div>
         <div className="space-y-1">
@@ -235,7 +256,7 @@ function ThreatDetail({threat, usage, sets, cells, onCalc}: {threat: MetaThreat;
             </div>
           ))}
         </div>
-        {u && u.counters.length > 0 && (
+        {!own && u && u.counters.length > 0 && (
           <div className="mt-3">
             <div className="label mb-1">Checks</div>
             <div className="text-dim">{u.counters.slice(0, 6).map(([n]) => n).join(', ')}</div>

@@ -218,3 +218,11 @@ export function dmgColor(p: number): string {
   if (p >= 0.25) return '#e6d36a';
   return '#5b6782';
 }
+
+/** Marks an opponent set whose nature and SP were guessed from usage data. */
+export function EstBadge({className = ''}: {className?: string}) {
+  return (
+    <span className={`shrink-0 border border-dashed border-line-2 px-1 text-[9.5px] font-semibold uppercase leading-[14px] text-faint ${className}`}
+      title="Spread estimated: the most common nature and Stat Points from usage data">est.</span>
+  );
+}

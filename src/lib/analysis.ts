@@ -225,6 +225,15 @@ export function metaWeather(name: string, usage: UsageSource): EnemyWeather | nu
   return best;
 }
 
+/** Weather an opponent team sets up itself (its first setter), for every one of its Pokémon. */
+export function oppWeather(opp: PokemonSet[]): EnemyWeather | null {
+  for (const s of opp) {
+    const w = WEATHER_SETTERS[abilityOf(s)];
+    if (w) return {weather: w, source: battleForme(s), share: 1};
+  }
+  return null;
+}
+
 /** Multiplier from ability + field, and a short label for it. */
 function abilitySpeedMod(ability: string, field: SpeedField): {mult: number; label?: string} {
   const w = SPEED_WEATHER[ability];
@@ -258,6 +267,8 @@ export interface SpeedEntry {
   usage?: number;
   /** Fastest of the common spreads (meta entries). */
   max?: number;
+  /** Opponent entries whose spread was guessed from usage data. */
+  estimated?: boolean;
 }
 
 /** Speed of each top meta Pokémon with its most common spread and ability. */
@@ -297,6 +308,22 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
     out.push({name, speed: top, max, mine: false, usage: u.usage, boosts: [...(mod.label ? [mod.label] : []), ...sideLabels], note: notes.join(' · ')});
   }
   return out;
+}
+
+/** Speed of each Pokémon of one opponent team, with its own spread, item and ability. */
+export function oppSpeeds(opp: PokemonSet[], field: SpeedField, enemyWeather = false): SpeedEntry[] {
+  const own = enemyWeather ? oppWeather(opp) : null;
+  const f = own ? {...field, weather: own.weather} : field;
+  return opp.filter(s => SPECIES[battleForme(s)]).map(s => {
+    const {speed, labels} = effectiveSpeed(s, f);
+    const notes: string[] = [];
+    const ability = abilityOf(s);
+    const w = SPEED_WEATHER[ability];
+    if (w && f.weather !== w) notes.push(`${WEATHER_LABEL[w]}: ${speed * 2}`);
+    else if (own && w) notes.unshift(`${WEATHER_LABEL[own.weather]} from ${own.source === battleForme(s) ? 'itself' : own.source}`);
+    if (SPEED_NOTES[ability]) notes.push(SPEED_NOTES[ability]);
+    return {name: battleForme(s), speed, mine: false, boosts: labels, note: notes.join(' · '), estimated: s.estimated};
+  });
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;

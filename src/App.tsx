@@ -2,7 +2,7 @@ import {useEffect, useMemo, useState} from 'react';
 import {FORMAT, SPECIES, TYPES, USAGE} from './lib/data';
 import {defensiveMult, roleCoverage} from './lib/analysis';
 import {useStore} from './lib/store';
-import {battleForme, validateTeam, type PokemonSet} from './lib/team';
+import {battleForme, validateTeam, type Opponent, type PokemonSet, type SavedBoard} from './lib/team';
 import {AnalysisView} from './components/AnalysisView';
 import {BulkView} from './components/BulkView';
 import {CalcView, makeSide, type Side} from './components/CalcView';
@@ -65,6 +65,19 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [enemyWeather, setEnemyWeather] = useState(false);
   const weather: WeatherState = {pref: weatherPref, setPref: setWeatherPref, enemy: enemyWeather, setEnemy: setEnemyWeather};
+  // Board whose opponent Analysis, Speed, Meta and Calc work against (null = the meta).
+  const [vsId, setVsId] = useState<string | null>(null);
+  const oppBoards = useMemo(() => {
+    const list = (team.boards ?? []).filter(b => b.mat.opp.length);
+    const open = list.find(b => b.id === team.playmat?.id);
+    return open ? [open, ...list.filter(b => b !== open)] : list;
+  }, [team.boards, team.playmat?.id]);
+  const vsBoard = vsId ? oppBoards.find(b => b.id === vsId) : undefined;
+  const opp = useMemo<Opponent | undefined>(
+    () => (vsBoard ? {id: vsBoard.id, name: vsBoard.mat.name || 'Board', sets: vsBoard.mat.opp} : undefined),
+    [vsBoard?.id, vsBoard?.mat.name, vsBoard?.mat.opp], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const vsPage = page === 'analyse' || page === 'speed' || page === 'meta' || page === 'calc';
 
   const setPage = (p: Page) => {
     if (location.hash.slice(1) !== p) location.hash = p;
@@ -175,6 +188,10 @@ export default function App() {
               aria-label="Team name"
             />
             <CheckBar sets={sets} errors={errorCount} onClick={() => setPage('analyse')} />
+            {vsPage && (
+              <VsPicker boards={oppBoards} openId={team.playmat?.id} opp={opp}
+                onChange={id => { setVsId(id); setCalcPair(null); }} />
+            )}
             <div className="flex gap-1.5">
               <button className="btn !px-2.5 !py-1 text-xs disabled:opacity-35" onClick={store.undo} disabled={!store.canUndo} title="Undo (Ctrl+Z)">↶</button>
               <button className="btn !py-1 text-xs" onClick={() => { store.create(); setSelected(0); setPage('bauen'); }}>+ New</button>
@@ -235,11 +252,11 @@ export default function App() {
           onAdd={s => { if (sets.length < 6) setSets(p => [...p, s]); }}
         />
       )}
-      {page === 'analyse' && <AnalysisView sets={sets} usage={usage} issues={issues} weather={weather} />}
+      {page === 'analyse' && <AnalysisView sets={sets} usage={usage} issues={issues} weather={weather} opp={opp} />}
       {page === 'offense' && <OffenseView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
-      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
+      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} opp={opp} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
       {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
-      {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
+      {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} opp={opp} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
       {page === 'playmat' && (
         <PlaymatView sets={sets} usage={usage} mat={team.playmat} onChange={store.setPlaymat}
           savedReplays={(team.matches ?? []).map(m => m.replay ?? '')}
@@ -262,7 +279,7 @@ export default function App() {
             } catch (e) { alert((e as Error).message); }
           }} />
       )}
-      {page === 'calc' && <CalcView sets={sets} usage={usage} pair={calcPair} setPair={setCalcPair} />}
+      {page === 'calc' && <CalcView sets={sets} usage={usage} opp={opp} pair={calcPair} setPair={setCalcPair} />}
 
       <footer className={`mt-12 border-t border-line pt-4 text-[11.5px] text-faint ${page === 'playmat' ? 'hidden' : ''}`}>
         <a className="underline hover:text-dim" href="https://www.smogon.com/stats/" target="_blank" rel="noreferrer">Smogon</a> ({usage.label}, {usage.month}) ·
@@ -312,6 +329,29 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+/** Pick what the planning tabs play against: the meta or the opponent of one of the team's boards. */
+function VsPicker({boards, openId, opp, onChange}: {
+  boards: SavedBoard[];
+  openId?: string;
+  opp?: Opponent;
+  onChange: (id: string | null) => void;
+}) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <select
+        className={`field !w-auto max-w-56 !py-1 text-xs ${opp ? '!border-gold text-gold' : 'text-dim'}`}
+        value={opp?.id ?? ''}
+        onChange={e => onChange(e.target.value || null)}
+        title={boards.length ? 'Plan against the meta or one opponent from your Playmat boards' : 'Load an opponent on the Playmat to plan against it'}
+      >
+        <option value="">vs meta</option>
+        {boards.map(b => <option key={b.id} value={b.id}>vs {b.mat.name || 'Board'}{b.id === openId ? ' (open)' : ''}</option>)}
+      </select>
+      {opp && <span className="flex gap-0.5">{opp.sets.map((s, i) => <Portrait key={i} name={battleForme(s)} size={22} />)}</span>}
+    </span>
   );
 }
 

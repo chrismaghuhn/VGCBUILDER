@@ -441,7 +441,7 @@ function replaySet(species: string, rev: Revealed | undefined, mySets: PokemonSe
   const own = mySets.find(s => s.species === species || baseOf(s.species) === baseOf(species) && SPECIES[s.species]?.num === SPECIES[species]?.num);
   let set: PokemonSet;
   if (own) set = clone(own);
-  else if (SPECIES[species]) set = metaSet(species, usage);
+  else if (SPECIES[species]) set = {...metaSet(species, usage), estimated: true};
   else set = blankSet(species);
   if (!rev) return set;
   if (rev.mega && SPECIES[rev.mega]?.requiredItem) set.item = SPECIES[rev.mega].requiredItem!;
