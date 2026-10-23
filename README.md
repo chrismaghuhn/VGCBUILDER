@@ -32,6 +32,23 @@ npm run data   # legality/learnsets (Showdown champions mod) + Smogon usage + Sp
 
 New regulation: adjust `FORMAT`/`SOURCES` in `scripts/build-data.mjs` and run `npm run data`.
 
+## Deploying
+
+Live at https://vgcbuilder.duckdns.org (static files served by Caddy on the VPS, HTTPS via Let's Encrypt).
+
+```bash
+npm run deploy
+```
+
+builds the site and uploads `dist/` with rsync to `duoforge-vps:/var/www/teamforge` (override with
+`DEPLOY_HOST` / `DEPLOY_DIR`). No sudo is needed for that.
+
+One-time server setup (Ubuntu 24.04, needs sudo): copy `deploy/` to the server and run
+`sudo bash setup-server.sh <domain>`. It installs Caddy, creates the web folder for the deploy user,
+writes `/etc/caddy/Caddyfile` from `deploy/Caddyfile` and opens ports 80/443 if ufw is active.
+HTTPS is required: password-protected board links use the Web Crypto API, which browsers only
+offer on secure origins.
+
 ## Sources & licenses
 
 - Usage data: [Smogon Stats](https://www.smogon.com/stats/)
