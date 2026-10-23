@@ -71,6 +71,29 @@ export interface Playmat {
   megas?: Record<string, boolean>;
   /** Set when the mat plays back a Showdown replay. */
   replay?: ReplayMat;
+  /** My side's sets for this mat (branched from a replay, or opened from a shared link); missing = the team's own. */
+  team?: PokemonSet[];
+  /** Storyboards: game plans of several turns. */
+  plans?: MatPlan[];
+  /** Index of the plan being edited; the board then is its current frame. */
+  plan?: number;
+}
+
+/** The parts of the board that change from turn to turn. */
+export const FRAME_KEYS = ['mine', 'theirs', 'hp', 'boosts', 'field', 'actions', 'megas', 'notes'] as const;
+export type MatFrame = Pick<Playmat, (typeof FRAME_KEYS)[number]> & {
+  /** Notes for this turn. */
+  note: string;
+};
+
+export interface MatPlan {
+  id: string;
+  name: string;
+  frames: MatFrame[];
+  /** Frame being shown. */
+  at: number;
+  /** Turn number of the first frame (plans branched from a replay start later). */
+  start: number;
 }
 
 export interface MatAction {

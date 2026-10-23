@@ -50,7 +50,7 @@ class BitReader {
 }
 
 /** Short binary encoding, or null when something isn't in the dictionary. */
-function encodeShort(name: string, sets: PokemonSet[]): string | null {
+export function encodeShort(name: string, sets: PokemonSet[]): string | null {
   const w = new BitWriter();
   w.write(SHORT_VERSION, 4);
   w.write(sets.length, BITS.count);
@@ -73,7 +73,7 @@ function encodeShort(name: string, sets: PokemonSet[]): string | null {
   return SHORT_PREFIX + toBase64Url(w.bytes());
 }
 
-function decodeShort(payload: string): {name: string; sets: PokemonSet[]; warnings: string[]} {
+export function decodeShort(payload: string): {name: string; sets: PokemonSet[]; warnings: string[]} {
   const r = new BitReader(fromBase64Url(payload));
   const version = r.read(4);
   if (version !== SHORT_VERSION) throw new Error(`Unsupported share link version ${version}`);
@@ -100,15 +100,15 @@ function decodeShort(payload: string): {name: string; sets: PokemonSet[]; warnin
   return {name, sets: checked, warnings};
 }
 
-const toBase64Url = (bytes: Uint8Array) =>
+export const toBase64Url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-const fromBase64Url = (s: string) => {
+export const fromBase64Url = (s: string) => {
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4);
   return Uint8Array.from(atob(b64), c => c.charCodeAt(0)) as Uint8Array<ArrayBuffer>;
 };
 
-async function pipe(bytes: Uint8Array<ArrayBuffer>, stream: CompressionStream | DecompressionStream): Promise<Uint8Array<ArrayBuffer>> {
+export async function pipe(bytes: Uint8Array<ArrayBuffer>, stream: CompressionStream | DecompressionStream): Promise<Uint8Array<ArrayBuffer>> {
   const out = new Blob([bytes]).stream().pipeThrough(stream);
   return new Uint8Array(await new Response(out).arrayBuffer());
 }
