@@ -144,7 +144,8 @@ export default function App() {
   };
 
   return (
-    <div className={`mx-auto px-4 pt-4 sm:px-6 ${page === 'playmat' ? 'max-w-none pb-4' : 'max-w-[1440px] pb-16'}`}>
+    // The header spans the full width on every page (as on the Playmat); the content below is centred.
+    <div className={`px-4 pt-4 sm:px-6 ${page === 'playmat' ? 'pb-4' : 'pb-16'}`}>
       {/* Header */}
       <header className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-3">
@@ -175,6 +176,7 @@ export default function App() {
           </select>
         </div>
       </header>
+      <div className={page === 'playmat' ? '' : 'mx-auto max-w-[1440px]'}>
 
       {store.saveError && (
         <div className="mb-4 border border-bad/60 bg-bad/10 px-3 py-2 text-[12.5px] text-bad">
@@ -376,6 +378,7 @@ export default function App() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }

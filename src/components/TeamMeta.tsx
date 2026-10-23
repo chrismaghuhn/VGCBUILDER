@@ -30,7 +30,9 @@ export function TeamNotes({team, allTags, onMeta}: {
     setDraft('');
   };
   return (
-    <div className="mt-3 grid gap-3 border-t border-line pt-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+    // Centred and as wide as the set editor below, instead of spread over the whole team row.
+    <div className="mt-3 border-t border-line pt-3">
+    <div className="mx-auto grid max-w-[980px] gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
       <div>
         <div className="label mb-1.5">Tags</div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -52,6 +54,7 @@ export function TeamNotes({team, allTags, onMeta}: {
         <textarea className="field h-20 resize-y text-[12.5px]" value={team.notes ?? ''} onChange={e => onMeta({notes: e.target.value}, `team-notes-${team.id}`)}
           placeholder="Game plan, leads, what to bring against what …" />
       </div>
+    </div>
     </div>
   );
 }
