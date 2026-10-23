@@ -19,7 +19,7 @@ import {Sprite} from './Sprite';
 import {Combobox, Section, dmgColor} from './ui';
 
 const BOARD_BG =
-  'repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 8px, transparent 8px 16px), repeating-linear-gradient(90deg, rgba(255,255,255,.022) 0 8px, transparent 8px 16px), #0e1918';
+  'repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 24px), repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 24px), #050505';
 
 const NOTE_COLORS: Record<MatNote['color'], string> = {gold: '#f5c542', blue: '#5aa9ff', red: '#f0566a', green: '#3ecf8e'};
 
@@ -632,8 +632,8 @@ function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, o
   const valid = drag?.side === side;
   const over = valid && drag.over === spot;
   const self = valid && drag.fromSpot && drag.index === index;
-  const pad = over ? `rgba(245,197,66,.28)` : `rgba(${ring},${valid ? '.26' : '.16'})`;
-  const edge = over ? `inset 0 0 0 2px rgba(245,197,66,.9), 0 0 24px rgba(245,197,66,.35)` : `inset 0 0 0 2px rgba(${ring},${valid ? '.75' : '.4'})`;
+  const pad = over ? `rgba(245,245,245,.28)` : `rgba(${ring},${valid ? '.26' : '.16'})`;
+  const edge = over ? `inset 0 0 0 2px rgba(245,245,245,.9), 0 0 24px rgba(245,245,245,.35)` : `inset 0 0 0 2px rgba(${ring},${valid ? '.75' : '.4'})`;
   return (
     <div data-drop={`${side}:${spot}`} className={`flex justify-center transition ${drag && !valid ? 'opacity-50' : ''}`}>
       {set ? (
@@ -654,7 +654,7 @@ function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, o
                 onClick={e => { e.stopPropagation(); onMega(); }}
                 title={set.unevolved ? 'Mega Evolve (one per side and battle)' : 'Mega Evolved: click to undo'}
                 className={`rounded px-1 font-display text-[10px] font-bold leading-[15px] transition ${
-                  set.unevolved ? 'border border-gold/50 text-gold/80 hover:bg-gold/15' : 'border border-gold bg-gold text-[#1a1406]'}`}>M</span>
+                  set.unevolved ? 'border border-gold/50 text-gold/80 hover:bg-gold/15' : 'border border-gold bg-gold text-black'}`}>M</span>
             )}
           </span>
           <div data-obstacle className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-black/40">
@@ -1268,7 +1268,7 @@ function ShareBoard({mat, sets}: {mat: Playmat; sets: PokemonSet[]}) {
   };
   const opt = (m: typeof mode, label: string, hint: string) => (
     <label className={`flex cursor-pointer gap-2 rounded-lg border p-2 ${mode === m ? 'border-gold/60 bg-gold/5' : 'border-line'}`}>
-      <input type="radio" className="mt-0.5 accent-[#f5c542]" checked={mode === m} onChange={() => { setMode(m); setLink(''); }} />
+      <input type="radio" className="mt-0.5 accent-white" checked={mode === m} onChange={() => { setMode(m); setLink(''); }} />
       <span><span className="block text-[12.5px] text-ink">{label}</span><span className="block text-[11.5px] text-faint">{hint}</span></span>
     </label>
   );

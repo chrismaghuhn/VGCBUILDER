@@ -25,7 +25,7 @@ export function TeamBar({
             <button
               key={i}
               onClick={() => onSelect(next)}
-              className={`flex min-h-[132px] items-center justify-center rounded-[14px] border border-dashed transition ${isActive && i === next ? 'border-gold bg-gold/5 text-gold' : 'border-line-2 text-faint hover:border-gold-dim hover:text-ink'}`}
+              className={`flex min-h-[132px] items-center justify-center border border-dashed transition ${isActive && i === next ? 'border-gold bg-gold/5 text-gold' : 'border-line-2 text-faint hover:border-gold-dim hover:text-ink'}`}
             >
               <span className="font-display text-3xl leading-none">+</span>
             </button>
@@ -46,7 +46,7 @@ export function TeamBar({
               if (!Number.isNaN(from) && from !== i) onMove(from, i);
             }}
             onClick={() => onSelect(i)}
-            className={`group relative cursor-pointer rounded-[14px] border p-2.5 transition ${active ? 'border-gold bg-gradient-to-b from-gold/10 to-panel shadow-[0_0_0_1px_rgba(245,197,66,.25),0_8px_30px_-12px_rgba(245,197,66,.35)]' : 'panel hover:border-line-2'}`}
+            className={`group relative cursor-pointer border p-2.5 transition ${active ? 'border-gold bg-gradient-to-b from-gold/10 to-panel shadow-[0_0_0_1px_rgba(245,245,245,.25),0_8px_30px_-12px_rgba(245,245,245,.35)]' : 'panel hover:border-line-2'}`}
           >
             <button
               onClick={e => { e.stopPropagation(); onRemove(i); }}

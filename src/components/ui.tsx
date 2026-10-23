@@ -181,7 +181,7 @@ export function Tabs<T extends string>({tabs, value, onChange}: {tabs: {key: T; 
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
-          className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-wider transition ${value === t.key ? 'bg-gold text-[#1a1406]' : 'text-dim hover:bg-panel-2 hover:text-ink'}`}
+          className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-wider transition ${value === t.key ? 'bg-gold text-black' : 'text-dim hover:bg-panel-2 hover:text-ink'}`}
         >
           {t.label}
           {t.badge}
