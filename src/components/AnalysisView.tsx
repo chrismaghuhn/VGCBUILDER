@@ -1,9 +1,9 @@
-import {useDeferredValue, useMemo, useState} from 'react';
+import {useDeferredValue, useMemo} from 'react';
 import {SPECIES, TYPE_COLOR, type UsageSource} from '../lib/data';
-import {defensiveMatrix, metaSpeeds, offensiveCoverage, roleCoverage, teamField, teamSpeeds, type SpeedField, type TypeRow, type Weather} from '../lib/analysis';
+import {defensiveMatrix, offensiveCoverage, roleCoverage, teamField, type SpeedField, type TypeRow} from '../lib/analysis';
 import {metaThreats, threatMatrix} from '../lib/calc';
 import {battleForme, type Issue, type PokemonSet} from '../lib/team';
-import {Portrait, Section, TypeBadge, WeatherControls, type WeatherState} from './ui';
+import {Portrait, Section, TypeBadge, type WeatherState} from './ui';
 
 const multLabel = (m: number) => (m === 0 ? '0' : m >= 4 ? '4×' : m >= 2 ? '2×' : m === 1.5 || m === 1.25 ? `${m}×` : m <= 0.25 ? '¼' : m < 1 ? '½' : '');
 const multStyle = (m: number) => {
@@ -108,68 +108,7 @@ export function AnalysisView({sets, usage, issues, weather}: {
         </div>
       </div>
 
-      <SpeedTiers sets={sets} usage={usage} field={field} weather={weather} autoWeather={auto.weather} />
     </div>
-  );
-}
-
-function SpeedTiers({sets, usage, field, weather, autoWeather}: {
-  sets: PokemonSet[];
-  usage: UsageSource;
-  field: SpeedField;
-  weather: WeatherState;
-  autoWeather: Weather;
-}) {
-  const [trickRoom, setTrickRoom] = useState(false);
-  const [tailwind, setTailwind] = useState(false);
-  const [limit, setLimit] = useState(40);
-  const rows = useMemo(() => {
-    const f = {...field, tailwind};
-    const all = [...teamSpeeds(sets, f), ...metaSpeeds(usage, limit, f, weather.enemy)];
-    return all.sort((a, b) => (trickRoom ? a.speed - b.speed : b.speed - a.speed) || (a.mine ? -1 : 1));
-  }, [sets, usage, limit, trickRoom, tailwind, field, weather.enemy]);
-  const max = Math.max(...rows.map(r => r.speed), 1);
-  const myNames = new Set(rows.filter(r => r.mine).map(r => r.name));
-
-  return (
-    <Section
-      title="Speed Tiers"
-      right={
-        <div className="flex items-center gap-2 text-xs">
-          <WeatherControls state={weather} auto={autoWeather} />
-          <select className="field !w-auto !py-1 text-xs" value={limit} onChange={e => setLimit(+e.target.value)}>
-            {[20, 40, 80].map(n => <option key={n} value={n}>Top {n} meta</option>)}
-          </select>
-          <button className={`btn !py-1 text-xs ${tailwind ? '!border-info !bg-info/15 text-info' : ''}`} onClick={() => setTailwind(t => !t)}>
-            Tailwind {tailwind ? 'on' : 'off'}
-          </button>
-          <button className={`btn !py-1 text-xs ${trickRoom ? '!border-[#c78cff] !bg-[#c78cff]/15 text-[#e2c6ff]' : ''}`} onClick={() => setTrickRoom(t => !t)}>
-            Trick Room {trickRoom ? 'on' : 'off'}
-          </button>
-        </div>
-      }
-    >
-      {/* One column, read top to bottom. */}
-      <div className="max-h-[560px] overflow-y-auto pr-1">
-        {rows.map((r, i) => (
-          <div key={r.name + i + r.mine} className={`flex items-center gap-2.5 border-b border-line/50 py-1 ${r.mine ? 'bg-gold/[.06] text-gold' : ''}`}>
-            <Portrait name={r.name} size={22} className="!rounded" />
-            <span className={`flex w-48 min-w-0 items-center gap-1.5 text-[13px] ${r.mine ? 'font-semibold' : ''}`}>
-              <span className="truncate">{r.name}</span>
-              {!r.mine && myNames.has(r.name) && <span className="shrink-0 rounded bg-line px-1 text-[9.5px] font-semibold uppercase text-dim">Meta</span>}
-            </span>
-            <span className="num w-9 text-right text-[13px] font-semibold">{r.speed}</span>
-            <span className="w-3 text-[10px] text-info" title={r.boosts.join(', ')}>{r.boosts.length ? '▲' : ''}</span>
-            <div className="hidden w-40 shrink-0 sm:block">
-              <div className="h-1.5 rounded-full" style={{width: `${(r.speed / max) * 100}%`, background: r.mine ? 'var(--color-gold)' : 'var(--color-line-2)'}} />
-            </div>
-            <span className="min-w-0 flex-1 truncate text-[11px] text-faint" title={[...r.boosts, r.note].filter(Boolean).join(' · ')}>
-              {[...r.boosts.filter(b => b !== 'Tailwind' && b !== 'Scarf'), r.note].filter(Boolean).join(' · ')}
-            </span>
-          </div>
-        ))}
-      </div>
-    </Section>
   );
 }
 

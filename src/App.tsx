@@ -10,6 +10,7 @@ import {PasteDialog} from './components/PasteDialog';
 import {Picker} from './components/Picker';
 import {SearchView} from './components/SearchView';
 import {SetEditor} from './components/SetEditor';
+import {SpeedView} from './components/SpeedView';
 import {TeamBar} from './components/TeamBar';
 import type {WeatherPref, WeatherState} from './components/ui';
 
@@ -17,6 +18,7 @@ const PAGES = [
   {key: 'bauen', label: 'Build'},
   {key: 'suche', label: 'Search'},
   {key: 'analyse', label: 'Analysis'},
+  {key: 'speed', label: 'Speed'},
   {key: 'meta', label: 'Meta'},
   {key: 'calc', label: 'Calc'},
 ] as const;
@@ -193,6 +195,7 @@ export default function App() {
         />
       )}
       {page === 'analyse' && <AnalysisView sets={sets} usage={usage} issues={issues} weather={weather} />}
+      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} onUpdateSet={(i, s) => setSlot(i, s)} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
       {page === 'calc' && <CalcView sets={sets} usage={usage} pair={calcPair} setPair={setCalcPair} />}
 
