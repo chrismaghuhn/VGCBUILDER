@@ -3,11 +3,15 @@ import {SPECIES, TYPE_COLOR, MOVES, pct, type UsageSource} from '../lib/data';
 import {WEATHER_LABEL, teamField} from '../lib/analysis';
 import {metaSet} from '../lib/calc';
 import {leadAdvice, rankPlans} from '../lib/matchup';
+import {encodeMat} from '../lib/matshare';
+import {
+  activePlan, addFrame, commitFrame, deleteFrame, deletePlan, gotoFrame, newPlan, setFrameNote, switchPlan, updatePlan,
+} from '../lib/playmat';
 import {activeFighters, autoTargets, canMega, keyOf, matSet, toggleMega, matCalc, matHits, newPlaymat, planMove, turnOrder, type Fighter} from '../lib/playmat';
 import {matchFromReplay, type Match} from '../lib/matches';
 import {fetchReplay, guessMe, parseReplay, replayId, replayPerspective, replayPlaymat, showStep, type ParsedReplay, type PSide} from '../lib/replay';
 import {decodeShare, fetchPokepaste, pokepasteId, sharePayload} from '../lib/share';
-import {battleForme, importTeam, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
+import {battleForme, importTeam, type MatPlan, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {koLabel} from './MetaView';
 import {speciesOptions} from './SetEditor';
@@ -19,7 +23,7 @@ const BOARD_BG =
 
 const NOTE_COLORS: Record<MatNote['color'], string> = {gold: '#f5c542', blue: '#5aa9ff', red: '#f0566a', green: '#3ecf8e'};
 
-type Panel = 'suggest' | 'help' | 'replay' | 'log';
+type Panel = 'suggest' | 'help' | 'replay' | 'log' | 'plan' | 'share';
 
 export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, savedReplays = []}: {
   sets: PokemonSet[];
@@ -30,8 +34,8 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
   onSaveMatch?: (m: Match) => void;
   savedReplays?: string[];
 }) {
-  // A replay brings its own team for the bottom side.
-  const sets = mat?.replay ? mat.replay.mine : mySets;
+  // A replay (or a board branched from one, or opened from a link) brings its own team for the bottom side.
+  const sets = mat?.team ?? (mat?.replay ? mat.replay.mine : mySets);
   const [selected, setSelected] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel | null>(mat?.replay ? 'log' : null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -158,10 +162,36 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
       goto(mat.replay.step + (e.key === 'ArrowLeft' ? -1 : 1));
       return;
     }
+    if (plan && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      frame(plan.at + (e.key === 'ArrowLeft' ? -1 : 1));
+      return;
+    }
     const m = /^Digit([1-4])$/.exec(e.code);
     if (!m) return;
     e.preventDefault();
     chooseMove(aimSide, e.shiftKey ? 1 : 0, +m[1] - 1);
+  };
+
+  const plan = mat.replay ? undefined : activePlan(mat);
+  /** Storyboard: show frame n. */
+  const frame = (n: number) => { setSelected(null); onChange(gotoFrame(mat, n), 'plan-step'); };
+  /** Toolbar "Plan": open the last plan, or start one from the board as it is. */
+  const openPlan = () => {
+    if (plan) { setPanel(panel === 'plan' ? null : 'plan'); return; }
+    onChange(mat.plans?.length ? switchPlan(mat, mat.plans.length - 1) : newPlan(mat));
+    setPanel('plan');
+  };
+  /** Replay: carry on from this turn as a storyboard of your own. */
+  const branch = () => {
+    const r = mat.replay!;
+    const turn = r.replay.steps[r.step].turn;
+    const them = r.me === 'p1' ? 'p2' : 'p1';
+    // Keep the moves of that turn as a starting point, but not what really happened: this is the alternative.
+    const actions = Object.fromEntries(Object.entries(mat.actions ?? {}).map(([k, a]) => [k, {move: a.move, targets: a.targets}]));
+    const free: Playmat = {...mat, actions, replay: undefined, team: r.mine, name: `${r.replay.players[them]} · from ${turnTitle(turn).toLowerCase()}`};
+    onChange(newPlan(free, `Alt from ${turnTitle(turn).toLowerCase()}`, Math.max(1, turn), r.turnNotes[turn] ?? ''));
+    setPanel('plan');
   };
 
   /** Replay: show step n (stepping coalesces into one undo entry). */
@@ -248,13 +278,15 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
         panel={panel}
         onPanel={p => setPanel(panel === p ? null : p)}
         replay={!!mat.replay}
+        planOpen={!!plan}
+        onPlan={openPlan}
         aimSide={aimSide}
         onAimSide={() => setAimSide(aimSide === 'mine' ? 'theirs' : 'mine')}
         onClearMoves={Object.keys(mat.actions ?? {}).length ? () => set({actions: {}}) : undefined}
       />
 
       {mat.replay && (
-        <ReplayBar mat={mat} onStep={goto}
+        <ReplayBar mat={mat} onStep={goto} onBranch={branch}
           saved={!!mat.replay.replay.id && savedReplays.includes(mat.replay.replay.id)}
           onSave={onSaveMatch && (() => {
             const r = mat.replay!;
@@ -268,6 +300,18 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
             const r = mat.replay!;
             onChange(showStep(replayPlaymat(r.replay, r.me === 'p1' ? 'p2' : 'p1', mySets, usage, r.turnNotes), r.step));
           }} />
+      )}
+
+      {plan && (
+        <PlanBar mat={mat} plan={plan} onFrame={frame} notesOpen={panel === 'plan'}
+          onNotes={() => setPanel(panel === 'plan' ? null : 'plan')}
+          onAdd={() => onChange(addFrame(mat))}
+          onDelete={() => onChange(deleteFrame(mat))}
+          onRename={name => onChange(updatePlan(mat, {name}), `plan-name-${plan.id}`)}
+          onSwitch={i => onChange(switchPlan(mat, i))}
+          onNew={() => onChange(newPlan(mat))}
+          onDeletePlan={() => { if (confirm(`Delete "${plan.name}"?`)) onChange(deletePlan(mat)); }}
+          onClose={() => { onChange(switchPlan(mat, undefined)); setPanel(null); }} />
       )}
 
       {/* Everything below the toolbar; floating cards anchor here */}
@@ -356,6 +400,16 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
           )}
         </Floating>
       )}
+      {panel === 'plan' && plan && (
+        <Floating side="left" title={`${plan.name} · ${frameTitle(plan, plan.at)}`} onClose={() => setPanel(null)}>
+          <PlanNotes plan={plan} onNote={(text, n) => onChange(setFrameNote(mat, text, n), `frame-note-${plan.id}-${n ?? plan.at}`)} onFrame={frame} />
+        </Floating>
+      )}
+      {panel === 'share' && (
+        <Floating side="right" title="Share this board" onClose={() => setPanel(null)}>
+          <ShareBoard mat={mat} sets={sets} />
+        </Floating>
+      )}
       {panel === 'replay' && (
         <Floating side="left" title="Import a Showdown replay" onClose={() => setPanel(null)}>
           <ReplayImport onLoad={openReplay} />
@@ -379,6 +433,8 @@ export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, sa
             <li><b className="text-ink">1–4</b> picks a move for the left Pokémon, <b className="text-ink">Shift+1–4</b> for the right one, <b className="text-ink">Tab</b> switches to the other side.</li>
             <li><b className="text-ink">Right-drag</b> from a Pokémon onto its target draws the attack with its damage. Spread moves aim themselves. Drag a damage label along its arrow, double-click it to reset.</li>
             <li>Add notes and drag them anywhere on the field.</li>
+            <li><b className="text-ink">Plan</b> turns the board into a storyboard: one frame per turn with its own board and notes; <b className="text-ink">← →</b> flip through it.</li>
+            <li><b className="text-ink">Share</b> makes a link to this board, open or with a password.</li>
             <li><b className="text-ink">Replay</b> loads a Showdown replay; <b className="text-ink">← →</b> step through its turns, each with its own notes.</li>
             <li>The dot under your bench Pokémon marks the four you bring.</li>
           </ul>
@@ -462,8 +518,10 @@ function fighterByKey(mat: Playmat, sets: PokemonSet[], key: string): Fighter | 
   return s ? {side, index, set: s, key} : null;
 }
 
-function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel, replay, aimSide, onAimSide, onClearMoves}: {
+function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel, replay, planOpen, onPlan, aimSide, onAimSide, onClearMoves}: {
   replay: boolean;
+  planOpen: boolean;
+  onPlan: () => void;
   aimSide: MatSide;
   onAimSide: () => void;
   onClearMoves?: () => void;
@@ -494,6 +552,7 @@ function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel
       </span>
       <button className={chip(panel === 'suggest')} onClick={() => onPanel('suggest')}>Suggest</button>
       {!replay && <button className={chip(panel === 'replay')} onClick={() => onPanel('replay')}>Replay</button>}
+      {!replay && <button className={chip(planOpen)} onClick={onPlan} title="Plan the game turn by turn">Plan</button>}
       <button className={chip(false)} onClick={onAimSide} title="Which side 1–4 picks moves for (Tab)">
         moves: <span className={aimSide === 'mine' ? 'text-info' : 'text-bad'}>{aimSide === 'mine' ? 'you' : 'them'}</span> <kbd className="text-faint">⇥</kbd>
       </button>
@@ -511,6 +570,7 @@ function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel
       {sideToggle('Light Screen', 'lightScreen')}
       <span className="ml-auto flex items-center gap-2">
         <button className="btn !py-0.5 text-xs" onClick={onNote}>+ Note</button>
+        <button className={chip(panel === 'share')} onClick={() => onPanel('share')} title="Share this board as a link">Share</button>
         <button className={chip(panel === 'help')} onClick={() => onPanel('help')} aria-label="How it works">?</button>
       </span>
     </div>
@@ -1045,8 +1105,8 @@ function ReplayImport({onLoad}: {onLoad: (r: ParsedReplay, hint: PSide | null) =
 }
 
 /** Players, side swap and the turn strip of a replay. */
-function ReplayBar({mat, onStep, onLog, logOpen, onSwap, onExit, onSave, saved}: {
-  mat: Playmat; onStep: (n: number) => void; onLog: () => void; logOpen: boolean; onSwap: () => void; onExit: () => void;
+function ReplayBar({mat, onStep, onLog, logOpen, onSwap, onExit, onSave, saved, onBranch}: {
+  mat: Playmat; onStep: (n: number) => void; onLog: () => void; logOpen: boolean; onSwap: () => void; onExit: () => void; onBranch: () => void;
   onSave?: () => void; saved: boolean;
 }) {
   const r = mat.replay!;
@@ -1087,6 +1147,7 @@ function ReplayBar({mat, onStep, onLog, logOpen, onSwap, onExit, onSave, saved}:
       <button className={btn} onClick={() => onStep(r.step + 1)} disabled={r.step >= steps.length - 1} title="Next turn (→)">▶</button>
       <span className="h-4 w-px shrink-0 bg-white/10" />
       <button className={`${btn} ${logOpen ? '!border-gold !text-gold' : ''}`} onClick={onLog}>Log</button>
+      <button className={btn} onClick={onBranch} title="Play on from this turn as your own plan (try what you should have done)">Branch</button>
       {onSave && (saved
         ? <span className="shrink-0 text-[11.5px] text-good" title="This replay is in the Matches tab">✓ in match log</span>
         : <button className={btn} onClick={onSave} title="Add this game to the Matches tab (turn notes included)">Save to log</button>)}
@@ -1114,6 +1175,125 @@ function TurnLog({mat, onNote}: {mat: Playmat; onNote: (text: string) => void}) 
       <div className="label mb-1 mt-3">Notes for {turnTitle(step.turn).toLowerCase()}</div>
       <textarea className="field h-20 resize-none text-[12.5px]" value={r.turnNotes[step.turn] ?? ''} onChange={e => onNote(e.target.value)}
         placeholder="What should have happened? What did you learn?" />
+    </div>
+  );
+}
+
+const frameTitle = (plan: MatPlan, i: number) => `Turn ${plan.start + i}`;
+
+/** Plan picker, name, the turn strip and frame controls of a storyboard. */
+function PlanBar({mat, plan, onFrame, onAdd, onDelete, onRename, onSwitch, onNew, onDeletePlan, onClose, onNotes, notesOpen}: {
+  mat: Playmat; plan: MatPlan; onFrame: (n: number) => void; onAdd: () => void; onDelete: () => void; onRename: (name: string) => void;
+  onSwitch: (i: number) => void; onNew: () => void; onDeletePlan: () => void; onClose: () => void; onNotes: () => void; notesOpen: boolean;
+}) {
+  const btn = 'shrink-0 rounded-md border border-white/10 px-2 py-0.5 text-[12px] text-dim hover:text-ink disabled:opacity-30';
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { ref.current?.querySelector('[data-current]')?.scrollIntoView({block: 'nearest', inline: 'center'}); }, [plan.at]);
+  return (
+    <div className="flex items-center gap-2 border-b border-white/5 bg-black/30 px-4 py-1.5 text-[12px]">
+      {(mat.plans?.length ?? 0) > 1 && (
+        <select className="field !w-auto shrink-0 !py-0.5 text-xs" value={mat.plan} onChange={e => onSwitch(+e.target.value)} title="Switch plan">
+          {mat.plans!.map((p, i) => <option key={p.id} value={i}>{p.name}</option>)}
+        </select>
+      )}
+      <input className="w-36 shrink-0 bg-transparent font-display text-[13px] font-semibold text-gold outline-none focus:underline" value={plan.name}
+        onChange={e => onRename(e.target.value)} aria-label="Plan name" />
+      <button className="shrink-0 text-[11.5px] text-faint underline hover:text-ink" onClick={onNew} title="New plan from the board as it is now">+ plan</button>
+      <span className="h-4 w-px shrink-0 bg-white/10" />
+      <button className={btn} onClick={() => onFrame(plan.at - 1)} disabled={plan.at === 0} title="Previous turn (←)">◀</button>
+      <div ref={ref} className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-0.5">
+        {plan.frames.map((f, i) => (
+          <button key={i} data-current={i === plan.at ? '' : undefined} onClick={() => onFrame(i)}
+            title={`${frameTitle(plan, i)}${f.note.trim() ? ` · ${f.note.trim()}` : ''}`}
+            className={`relative min-w-[34px] shrink-0 rounded-md border px-1.5 py-0.5 text-center num text-[11.5px] transition ${
+              i === plan.at ? 'border-gold bg-gold/15 text-gold' : 'border-white/10 text-dim hover:text-ink'}`}>
+            T{plan.start + i}
+            {f.note.trim() && <span className="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-gold" />}
+          </button>
+        ))}
+        <button className={btn} onClick={onAdd} title="Next turn: copies this board without its moves">+ turn</button>
+      </div>
+      <button className={btn} onClick={() => onFrame(plan.at + 1)} disabled={plan.at >= plan.frames.length - 1} title="Next turn (→)">▶</button>
+      <span className="h-4 w-px shrink-0 bg-white/10" />
+      <button className={`${btn} ${notesOpen ? '!border-gold !text-gold' : ''}`} onClick={onNotes}>Notes</button>
+      <button className={btn} onClick={onDelete} disabled={plan.frames.length < 2} title="Delete this turn">− turn</button>
+      <button className="shrink-0 text-[11.5px] text-faint underline hover:text-bad" onClick={onDeletePlan}>delete plan</button>
+      <button className="shrink-0 text-[11.5px] text-faint underline hover:text-ink" onClick={onClose} title="Back to the free board (the plan stays saved)">close</button>
+    </div>
+  );
+}
+
+/** The note of the current turn, and the whole plan at a glance. */
+function PlanNotes({plan, onNote, onFrame}: {plan: MatPlan; onNote: (text: string, n?: number) => void; onFrame: (n: number) => void}) {
+  return (
+    <div>
+      <textarea className="field h-28 resize-none text-[12.5px]" value={plan.frames[plan.at].note} onChange={e => onNote(e.target.value)}
+        placeholder="What happens this turn, and why? What if they do something else?" autoFocus />
+      <div className="label mb-1 mt-3">Game plan</div>
+      <ol className="space-y-1 text-[12px]">
+        {plan.frames.map((f, i) => (
+          <li key={i}>
+            <button className={`w-full rounded-md px-1.5 py-1 text-left hover:bg-panel-2 ${i === plan.at ? 'bg-gold/10' : ''}`} onClick={() => onFrame(i)}>
+              <span className={`num mr-1.5 ${i === plan.at ? 'text-gold' : 'text-faint'}`}>T{plan.start + i}</span>
+              <span className={f.note.trim() ? 'text-dim' : 'text-faint italic'}>{f.note.trim() || 'no notes'}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** Make a link to the board: open for anyone with it, or encrypted with a password. */
+function ShareBoard({mat, sets}: {mat: Playmat; sets: PokemonSet[]}) {
+  const [mode, setMode] = useState<'open' | 'password'>('open');
+  const [password, setPassword] = useState('');
+  const [link, setLink] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
+  const make = async () => {
+    setError(''); setCopied(false); setBusy(true);
+    try {
+      // The live board is the current frame: store it into its plan first.
+      setLink(await encodeMat(commitFrame(mat), sets, mode === 'password' ? password : undefined));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); } catch { setError('Copy failed: select the link and copy it by hand.'); }
+  };
+  const opt = (m: typeof mode, label: string, hint: string) => (
+    <label className={`flex cursor-pointer gap-2 rounded-lg border p-2 ${mode === m ? 'border-gold/60 bg-gold/5' : 'border-line'}`}>
+      <input type="radio" className="mt-0.5 accent-[#f5c542]" checked={mode === m} onChange={() => { setMode(m); setLink(''); }} />
+      <span><span className="block text-[12.5px] text-ink">{label}</span><span className="block text-[11.5px] text-faint">{hint}</span></span>
+    </label>
+  );
+  return (
+    <div className="space-y-2.5">
+      {opt('open', 'Anyone with the link', 'The board is packed into the link itself.')}
+      {opt('password', 'Password', 'The link is encrypted in your browser; it only opens with the password.')}
+      {mode === 'password' && (
+        <input type="password" className="field text-[12.5px]" value={password} onChange={e => { setPassword(e.target.value); setLink(''); }}
+          placeholder="Password (share it separately)" autoComplete="new-password" />
+      )}
+      <button className="btn btn-gold w-full" onClick={make} disabled={busy || (mode === 'password' && password.length < 4)}>
+        {busy ? 'Packing …' : 'Create link'}
+      </button>
+      {link && (
+        <div>
+          <div className="flex gap-1.5">
+            <input className="field num text-[11.5px]" readOnly value={link} onFocus={e => e.target.select()} />
+            <button className="btn shrink-0" onClick={copy}>{copied ? '✓ Copied' : 'Copy'}</button>
+          </div>
+          <p className="mt-1 text-[11px] text-faint">{link.length.toLocaleString('en')} characters · a snapshot: later changes need a new link.</p>
+        </div>
+      )}
+      {error && <p className="text-[12px] text-bad">{error}</p>}
+      <p className="text-[11px] text-faint">Everything after the # stays in the browser and is never sent to a server.</p>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import {MOVES, megaForme, type UsageSource} from './data';
 import {abilityOf, effectiveSpeed, teamField, type SpeedField} from './analysis';
 import {runCalc, type CalcOut, type FieldOpts} from './calc';
 import {rankPlans} from './matchup';
-import type {MatAction, MatSide, Playmat, PokemonSet} from './team';
+import {FRAME_KEYS, type MatAction, type MatFrame, type MatPlan, type MatSide, type Playmat, type PokemonSet} from './team';
 
 export const keyOf = (side: MatSide, i: number) => `${side === 'mine' ? 'm' : 't'}${i}`;
 
@@ -155,4 +155,83 @@ export function matHits(mat: Playmat, atk: Fighter, def: Fighter) {
     .map(m => ({move: m, out: matCalc(mat, atk, def, m)}))
     .filter((x): x is {move: string; out: CalcOut} => !!x.out)
     .sort((a, b) => b.out.maxPct - a.out.maxPct);
+}
+
+// ------------------------------------------------------------------ Storyboards
+
+const pick = (mat: Playmat): Omit<MatFrame, 'note'> =>
+  Object.fromEntries(FRAME_KEYS.map(k => [k, structuredClone(mat[k])])) as Omit<MatFrame, 'note'>;
+
+export const activePlan = (mat: Playmat): MatPlan | undefined => (mat.plan === undefined ? undefined : mat.plans?.[mat.plan]);
+
+/** Write the live board back into the plan's current frame (the board is always that frame). */
+export function commitFrame(mat: Playmat): Playmat {
+  const plan = activePlan(mat);
+  if (!plan) return mat;
+  const frames = plan.frames.map((f, i) => (i === plan.at ? {...pick(mat), note: f.note} : f));
+  return {...mat, plans: mat.plans!.map((p, i) => (i === mat.plan ? {...plan, frames} : p))};
+}
+
+/** Show frame `n` of the active plan. */
+export function gotoFrame(mat: Playmat, n: number): Playmat {
+  const m = commitFrame(mat);
+  const plan = activePlan(m);
+  if (!plan || n < 0 || n >= plan.frames.length) return m;
+  const {note: _note, ...board} = structuredClone(plan.frames[n]);
+  return {...m, ...board, plans: m.plans!.map((p, i) => (i === m.plan ? {...plan, at: n} : p))};
+}
+
+/** A new turn after the current one: same board (HP, field, stages carry on), no moves or notes yet. */
+export function addFrame(mat: Playmat): Playmat {
+  const m = commitFrame(mat);
+  const plan = activePlan(m);
+  if (!plan) return m;
+  const frame: MatFrame = {...pick(m), actions: {}, note: ''};
+  const frames = [...plan.frames.slice(0, plan.at + 1), frame, ...plan.frames.slice(plan.at + 1)];
+  return gotoFrame({...m, plans: m.plans!.map((p, i) => (i === m.plan ? {...plan, frames} : p))}, plan.at + 1);
+}
+
+export function deleteFrame(mat: Playmat): Playmat {
+  const plan = activePlan(mat);
+  if (!plan || plan.frames.length < 2) return mat;
+  const frames = plan.frames.filter((_, i) => i !== plan.at);
+  const at = Math.min(plan.at, frames.length - 1);
+  // Load the neighbour without committing the deleted board.
+  const {note: _note, ...board} = structuredClone(frames[at]);
+  return {...mat, ...board, plans: mat.plans!.map((p, i) => (i === mat.plan ? {...plan, frames, at} : p))};
+}
+
+/** Start a storyboard from the board as it is. */
+export function newPlan(mat: Playmat, name?: string, start = 1, note = ''): Playmat {
+  const m = commitFrame(mat);
+  const plans = m.plans ?? [];
+  const plan: MatPlan = {id: Math.random().toString(36).slice(2, 9), name: name ?? `Plan ${plans.length + 1}`, frames: [{...pick(m), note}], at: 0, start};
+  return {...m, plans: [...plans, plan], plan: plans.length};
+}
+
+export function switchPlan(mat: Playmat, index: number | undefined): Playmat {
+  const m = commitFrame(mat);
+  if (index === undefined) return {...m, plan: undefined};
+  const plan = m.plans?.[index];
+  if (!plan) return m;
+  const {note: _note, ...board} = structuredClone(plan.frames[plan.at]);
+  return {...m, ...board, plan: index};
+}
+
+export function deletePlan(mat: Playmat): Playmat {
+  if (mat.plan === undefined) return mat;
+  return {...mat, plans: mat.plans!.filter((_, i) => i !== mat.plan), plan: undefined};
+}
+
+export function updatePlan(mat: Playmat, patch: Partial<MatPlan>): Playmat {
+  const plan = activePlan(mat);
+  return plan ? {...mat, plans: mat.plans!.map((p, i) => (i === mat.plan ? {...plan, ...patch} : p))} : mat;
+}
+
+/** Set the note of frame `n` (default: the current one). */
+export function setFrameNote(mat: Playmat, text: string, n?: number): Playmat {
+  const plan = activePlan(mat);
+  if (!plan) return mat;
+  const at = n ?? plan.at;
+  return updatePlan(mat, {frames: plan.frames.map((f, i) => (i === at ? {...f, note: text} : f))});
 }

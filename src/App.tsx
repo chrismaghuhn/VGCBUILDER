@@ -8,7 +8,9 @@ import {BulkView} from './components/BulkView';
 import {CalcView, makeSide, type Side} from './components/CalcView';
 import {PlaymatView} from './components/PlaymatView';
 import {MatchesView} from './components/MatchesView';
-import {fetchReplay, guessMe, replayPlaymat} from './lib/replay';
+import {fetchReplay, guessMe, replayPlaymat, showStep} from './lib/replay';
+import {decodeMat, matPayload, type SharedMat} from './lib/matshare';
+import type {Playmat} from './lib/team';
 import {MetaView} from './components/MetaView';
 import {OffenseView} from './components/OffenseView';
 import {PasteDialog} from './components/PasteDialog';
@@ -56,6 +58,8 @@ export default function App() {
   const [dialog, setDialog] = useState<'import' | 'export' | null>(null);
   // A team received via share link (#share=…), waiting for the user to import it.
   const [shared, setShared] = useState<{name: string; sets: PokemonSet[]; warnings: string[]} | {error: string} | null>(null);
+  // A Playmat received via link (#mat=… / #matx=…), waiting to be opened.
+  const [sharedMat, setSharedMat] = useState<{locked: boolean; data: string} | null>(null);
   const [calcPair, setCalcPair] = useState<[Side, Side] | null>(null);
   const [weatherPref, setWeatherPref] = useState<WeatherPref>('auto');
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,6 +78,8 @@ export default function App() {
       if (PAGES.some(p => p.key === h)) setPageState(h as Page);
       const payload = sharePayload(h);
       if (payload) decodeShare(payload).then(setShared, e => setShared({error: (e as Error).message}));
+      const board = matPayload(location.hash);
+      if (board) setSharedMat(board);
     };
     onHash();
     window.addEventListener('hashchange', onHash);
@@ -262,6 +268,24 @@ export default function App() {
         />
       )}
 
+      {sharedMat && (
+        <SharedMatDialog
+          payload={sharedMat}
+          teamName={team.name}
+          onClose={() => { setSharedMat(null); history.replaceState(null, '', `${location.pathname}#playmat`); setPageState('playmat'); }}
+          onOpen={async shared => {
+            let mat: Playmat = shared.mat;
+            if (shared.replay) {
+              // Replays travel as their id: fetch the battle again and lay it out at the same turn.
+              const r = await fetchReplay(shared.replay.id);
+              const m = showStep(replayPlaymat(r, shared.replay.me, shared.mat.team ?? [], usage, shared.replay.turnNotes), shared.replay.step);
+              mat = {...m, notes: shared.mat.notes, plans: shared.mat.plans};
+            }
+            store.setPlaymat(mat);
+          }}
+        />
+      )}
+
       {dialog && (
         <PasteDialog
           mode={dialog}
@@ -346,6 +370,70 @@ function SharedDialog({shared, onImport, onClose}: {
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** A board from a link: ask for the password if it has one, then put it on the Playmat. */
+function SharedMatDialog({payload, teamName, onOpen, onClose}: {
+  payload: {locked: boolean; data: string};
+  teamName: string;
+  onOpen: (m: SharedMat) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [password, setPassword] = useState('');
+  const [shared, setShared] = useState<SharedMat | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const read = async () => {
+    setError(''); setBusy(true);
+    try { setShared(await decodeMat(payload, password)); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  };
+  useEffect(() => { if (!payload.locked) read(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const open = async () => {
+    if (!shared) return;
+    setBusy(true);
+    try { await onOpen(shared); onClose(); } catch (e) { setError((e as Error).message); setBusy(false); }
+  };
+  const plans = shared?.mat.plans ?? [];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+      <div className="panel rise w-full max-w-lg p-5" onMouseDown={e => e.stopPropagation()}>
+        <div className="label">Shared Playmat</div>
+        {!shared && payload.locked && (
+          <>
+            <h2 className="font-display text-xl font-semibold">This board is password-protected</h2>
+            <input type="password" className="field mt-3 text-[13px]" value={password} autoFocus placeholder="Password"
+              onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && password && read()} />
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn btn-gold" onClick={read} disabled={!password || busy}>{busy ? 'Unlocking …' : 'Unlock'}</button>
+            </div>
+          </>
+        )}
+        {shared && (
+          <>
+            <h2 className="font-display text-xl font-semibold">{shared.mat.name || 'Board'}</h2>
+            <div className="mt-3 flex flex-wrap items-center gap-1">
+              {(shared.mat.team ?? []).map((s, i) => <Portrait key={i} name={battleForme(s)} size={34} />)}
+              <span className="mx-2 text-[12px] text-faint">vs</span>
+              {shared.mat.opp.map((s, i) => <Portrait key={i} name={battleForme(s)} size={34} />)}
+            </div>
+            <p className="mt-2 text-[12.5px] text-dim">
+              {shared.replay ? 'A Showdown replay' : 'A board'}
+              {plans.length > 0 && ` with ${plans.length} plan${plans.length > 1 ? 's' : ''} (${plans.map(p => `${p.name}: ${p.frames.length} turns`).join(', ')})`}.
+            </p>
+            {shared.warnings.length > 0 && <p className="mt-1 text-[12px] text-warn">{shared.warnings.join(' · ')}</p>}
+            <p className="mt-2 text-[11.5px] text-faint">Opening it replaces the Playmat of “{teamName}” (Ctrl+Z brings yours back).</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="btn" onClick={onClose}>Dismiss</button>
+              <button className="btn btn-gold" onClick={open} disabled={busy}>{busy ? 'Opening …' : 'Open on the Playmat'}</button>
+            </div>
+          </>
+        )}
+        {!shared && !payload.locked && !error && <p className="mt-2 text-[13px] text-dim">Reading the link …</p>}
+        {error && <p className="mt-2 text-[13px] text-bad">{error}</p>}
       </div>
     </div>
   );
