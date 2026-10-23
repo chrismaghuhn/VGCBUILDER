@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vgcbuilder.duckdns.org/sitemap.xml
