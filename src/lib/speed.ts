@@ -7,6 +7,7 @@ export type SpeedNeed =
   | {kind: 'tie'}                                    // best you can do is a speed tie
   | {kind: 'sp'; sp: number}                         // change Spe SP, keep nature
   | {kind: 'nature'; sp: number; nature: string}     // needs a different nature too
+  | {kind: 'locked'}                                 // only by touching locked stats
   | {kind: 'impossible'};
 
 const speedOf = (set: PokemonSet, sp: number, nature: string, field: SpeedField) =>
@@ -31,6 +32,15 @@ export function speedNeed(set: PokemonSet, target: number, field: SpeedField, tr
   const beats = (v: number) => (trickRoom ? v < target : v > target);
   const current = speedOf(set, set.sps.spe, set.nature, field);
   if (beats(current)) return {kind: 'done'};
+  const locked = set.locked ?? [];
+  if (locked.length) {
+    // Same search without locks; keep the answer only if it respects them.
+    const free = speedNeed({...set, locked: []}, target, field, trickRoom);
+    if (free.kind !== 'sp' && free.kind !== 'nature') return free;
+    const nature = free.kind === 'nature' ? free.nature : set.nature;
+    const fits = !locked.includes('spe') && natureKeepsLocked(set, nature) && applySps(set, {spe: free.sp}, nature).ok;
+    return fits ? free : {kind: 'locked'};
+  }
 
   if (!trickRoom) {
     // Smallest SP that is enough (SP above the current value only).
@@ -83,4 +93,13 @@ export function applySps(
     over--;
   }
   return {set: {...set, nature, sps}, taken: [...taken], ok: over <= 0};
+}
+
+/** A nature change must not change any locked stat (e.g. Timid → Calm with Speed locked). */
+export function natureKeepsLocked(set: PokemonSet, nature: string): boolean {
+  const mult = (n: string, s: StatID) => {
+    const [plus, minus] = NATURES[n] ?? [null, null];
+    return plus === minus ? 1 : plus === s ? 1.1 : minus === s ? 0.9 : 1;
+  };
+  return (set.locked ?? []).every(s => mult(set.nature, s) === mult(nature, s));
 }

@@ -4,7 +4,12 @@ Teambuilder for the current VGC format: **Pokémon Champions, Regulation M-C**.
 
 - **Build**: 6 slots, suggestions with reasons right in the empty slot, an editor for item/ability/moves with collapsible fine-tuning (nature, Stat Points 66/32, meta spreads). Undo with Ctrl+Z.
 - **Search**: find Pokémon by function, not just by name. Supports concepts (speed control, pivot, anti-TR, cleric …), moves, abilities, items, types and abbreviations (EQ, TW, HH …). Use spaces for AND and `|` for OR. Results are sorted by how often the matched move/ability/item is actually played.
-- **Analysis**: issue overview, defensive type chart (including abilities/Megas), coverage, role check, speed tiers with weather abilities.
+- **Analysis**: issue overview, defensive type chart (including abilities/Megas), coverage, role check.
+- **Spread planning** in three steps, each showing per meta threat what your Pokémon needs, applied with one click:
+  1. **Offense**: Atk/SpA SP (and nature) for guaranteed OHKOs/2HKOs.
+  2. **Speed**: Spe SP to outspeed, incl. weather abilities, Tailwind, Trick Room, stages, paralysis.
+  3. **Bulk**: HP/Def/SpD SP to survive, incl. stat drops and screens.
+  Lock what you've settled; suggestions never touch locked stats and never undo a KO, outspeed or survival you already have.
 - **Meta**: threat matrix with real damage calcs (KO labels), weather incl. enemy weather, leads, archetypes.
 - **Calc**: Champions mechanics via `@smogon/calc`.
 - Legality check, Showdown import/export (classic EVs are converted to Stat Points).

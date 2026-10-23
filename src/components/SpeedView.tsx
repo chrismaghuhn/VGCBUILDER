@@ -4,15 +4,17 @@ import {effectiveSpeed, metaSpeeds, teamField, teamSpeeds, type SpeedEntry, type
 import {applySpeed, speedNeed, type SpeedNeed} from '../lib/speed';
 import {battleForme, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
+import {PlanBar, type PlanStep} from './PlanBar';
 import {Portrait, Section, WeatherControls, type WeatherState} from './ui';
 
-export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
+export function SpeedView({sets, usage, weather, selected, onUpdateSet, onStep}: {
   sets: PokemonSet[];
   usage: UsageSource;
   weather: WeatherState;
   /** Index into sets, picked via the team bar. */
   selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
+  onStep: (s: PlanStep) => void;
 }) {
   const [trickRoom, setTrickRoom] = useState(false);
   const [tailwind, setTailwind] = useState(false);
@@ -78,6 +80,7 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet}: {
           </div>
         }
       >
+        {me && <PlanBar step="speed" set={me} onChange={s => onUpdateSet(sel, s)} onStep={onStep} />}
         <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12.5px]">
           <StageControl label="You" stage={myStage} setStage={setMyStage} para={myPara} setPara={setMyPara} />
           <StageControl label="Opponents" stage={enemyStage} setStage={setEnemyStage} para={enemyPara} setPara={setEnemyPara} />
@@ -157,6 +160,7 @@ function NeedChip({need, trickRoom, onApply, me}: {need: SpeedNeed; trickRoom: b
   if (need.kind === 'done') return <span className="text-[11.5px] text-good">✓ {trickRoom ? 'slower' : 'faster'}</span>;
   if (need.kind === 'tie') return <span className="text-[11.5px] text-warn">speed tie at best</span>;
   if (need.kind === 'impossible') return <span className="text-[11.5px] text-faint">✗ out of reach</span>;
+  if (need.kind === 'locked') return <span className="text-[11.5px] text-info" title="Reachable only by changing a locked stat">🔒 needs locked SP</span>;
   const nature = need.kind === 'nature' ? need.nature : undefined;
   const {taken} = applySpeed(me, need.sp, nature);
   const detail = `Set ${nature ? `${nature}, ` : ''}Spe ${need.sp} SP${taken.length ? ` (takes ${taken.map(([s, n]) => `${n} from ${STAT_LABEL[s]}`).join(', ')})` : ''}`;

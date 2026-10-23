@@ -7,6 +7,7 @@ import {AnalysisView} from './components/AnalysisView';
 import {BulkView} from './components/BulkView';
 import {CalcView, makeSide, type Side} from './components/CalcView';
 import {MetaView} from './components/MetaView';
+import {OffenseView} from './components/OffenseView';
 import {PasteDialog} from './components/PasteDialog';
 import {Picker} from './components/Picker';
 import {SearchView} from './components/SearchView';
@@ -19,6 +20,7 @@ const PAGES = [
   {key: 'bauen', label: 'Build'},
   {key: 'suche', label: 'Search'},
   {key: 'analyse', label: 'Analysis'},
+  {key: 'offense', label: 'Offense'},
   {key: 'speed', label: 'Speed'},
   {key: 'bulk', label: 'Bulk'},
   {key: 'meta', label: 'Meta'},
@@ -41,9 +43,9 @@ export default function App() {
   const usage = USAGE[store.source] ?? USAGE[FORMAT.sources[0].key];
   const [page, setPageState] = useState<Page>(pageFromHash);
   const [selected, setSelected] = useState(0);
-  // Pokémon picked for planning on the Speed and Bulk tabs.
+  // Pokémon picked for planning on the Offense, Speed and Bulk tabs.
   const [planSel, setPlanSel] = useState(0);
-  const planning = page === 'speed' || page === 'bulk';
+  const planning = page === 'offense' || page === 'speed' || page === 'bulk';
   const [dialog, setDialog] = useState<'import' | 'export' | null>(null);
   const [calcPair, setCalcPair] = useState<[Side, Side] | null>(null);
   const [weatherPref, setWeatherPref] = useState<WeatherPref>('auto');
@@ -162,7 +164,7 @@ export default function App() {
           selected={page === 'bauen' ? sel : planning ? Math.min(planSel, sets.length - 1) : -1}
           issues={issues}
           onSelect={i => {
-            // On Speed/Bulk a click picks the Pokémon to plan for; elsewhere it opens the editor.
+            // On the planning tabs a click picks the Pokémon to plan for; elsewhere it opens the editor.
             if (planning && i < sets.length) setPlanSel(i);
             else { setSelected(i); setPage('bauen'); }
           }}
@@ -208,8 +210,9 @@ export default function App() {
         />
       )}
       {page === 'analyse' && <AnalysisView sets={sets} usage={usage} issues={issues} weather={weather} />}
-      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
-      {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
+      {page === 'offense' && <OffenseView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
+      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
+      {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
       {page === 'calc' && <CalcView sets={sets} usage={usage} pair={calcPair} setPair={setCalcPair} />}
 
