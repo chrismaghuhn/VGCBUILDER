@@ -31,7 +31,7 @@ export function PlaymatView({sets, usage, mat, onChange}: {
   const [lastPicked, setLastPicked] = useState<string | null>(null);
   const [aim, setAim] = useState<Aim | null>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
-  const anchors = useAnchors(fieldRef);
+  const {anchors, obstacles} = useAnchors(fieldRef);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   useEffect(() => {
     const h = (e: KeyboardEvent) => keyRef.current(e);
@@ -227,9 +227,9 @@ export function PlaymatView({sets, usage, mat, onChange}: {
 
         {/* Turn order across the middle */}
         <div className="mx-6 my-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-y border-dashed border-white/10 py-2 text-[12px]">
-          <span className="label mr-1">{mat.field.trickRoom ? 'Order (Trick Room)' : 'Order'}</span>
+          <span data-obstacle className="label mr-1">{mat.field.trickRoom ? 'Order (Trick Room)' : 'Order'}</span>
           {order.map((f, k) => (
-            <span key={f.key} className="flex items-center gap-1">
+            <span key={f.key} data-obstacle className="flex items-center gap-1">
               {k > 0 && <span className="text-faint">›</span>}
               <span className={f.side === 'mine' ? 'text-info' : 'text-bad'}>{f.set.species}</span>
               {f.move && <span className="text-dim">{f.move}</span>}
@@ -247,7 +247,7 @@ export function PlaymatView({sets, usage, mat, onChange}: {
           ))}
         </div>
 
-        <Arrows mat={mat} sets={sets} fighters={fighters} anchors={anchors} aim={aim} />
+        <Arrows mat={mat} sets={sets} fighters={fighters} anchors={anchors} obstacles={obstacles} aim={aim} />
 
         {/* Sticky notes float over the field */}
         {mat.notes.map(n => (
@@ -490,7 +490,7 @@ function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, o
   return (
     <div data-drop={`${side}:${spot}`} className={`flex justify-center transition ${drag && !valid ? 'opacity-50' : ''}`}>
       {set ? (
-        <div className="flex flex-col items-center">
+        <div className="group/spot flex flex-col items-center">
         <button data-fighter={key} onPointerDown={e => e.button === 0 && onGrab(side, index!, true)(e)}
           onClick={e => { e.stopPropagation(); onSelect(key); }}
           className={`flex cursor-grab touch-none select-none flex-col items-center rounded-2xl p-1 transition active:cursor-grabbing ${selected === key && !drag ? 'bg-gold/10 outline outline-1 outline-gold/50' : ''}`}>
@@ -498,10 +498,10 @@ function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, o
             <div className="absolute bottom-0 h-8 w-40 rounded-[50%] transition" style={{background: pad, boxShadow: edge}} />
             {over && !self && drag.fromSpot && <span className="absolute top-1 rounded bg-black/60 px-1.5 text-[10.5px] text-gold">swap</span>}
             {over && !self && !drag.fromSpot && <span className="absolute top-1 rounded bg-black/60 px-1.5 text-[10.5px] text-gold">replace</span>}
-            <div className={`relative -mb-1.5 transition ${self ? 'opacity-30' : over ? 'opacity-50' : ''}`}><Sprite name={battleForme(set)} facing={side === 'mine' ? 'up' : 'down'} scale={3} fit={140} offset={offset} /></div>
+            <div data-obstacle className={`relative -mb-1.5 transition ${self ? 'opacity-30' : over ? 'opacity-50' : ''}`}><Sprite name={battleForme(set)} facing={side === 'mine' ? 'up' : 'down'} scale={3} fit={140} offset={offset} /></div>
           </div>
-          <span className="mt-1.5 font-display text-[15px] font-semibold">{set.species}</span>
-          <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-black/40">
+          <span data-obstacle className="mt-1.5 font-display text-[15px] font-semibold">{set.species}</span>
+          <div data-obstacle className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-black/40">
             <div className="h-full rounded-full" style={{width: `${hp}%`, background: hp > 50 ? 'var(--color-good)' : hp > 20 ? 'var(--color-warn)' : 'var(--color-bad)'}} />
           </div>
         </button>
@@ -694,9 +694,14 @@ interface Aim {
 }
 type Point = {x: number; y: number};
 
-/** Centers of the Pokémon on the field, relative to the field box; re-measured on layout changes. */
+type Rect = {x: number; y: number; w: number; h: number};
+
+/**
+ * Centers of the Pokémon on the field and the boxes arrow labels should keep clear of (names, HP bars,
+ * move chips, sprites, the turn order), relative to the field box; re-measured on layout changes.
+ */
 function useAnchors(ref: React.RefObject<HTMLDivElement | null>) {
-  const [anchors, setAnchors] = useState<Record<string, Point>>({});
+  const [state, setState] = useState<{anchors: Record<string, Point>; obstacles: Rect[]}>({anchors: {}, obstacles: []});
   useLayoutEffect(() => {
     const box = ref.current;
     if (!box) return;
@@ -707,14 +712,19 @@ function useAnchors(ref: React.RefObject<HTMLDivElement | null>) {
         const r = (el.querySelector('[data-anchor]') ?? el).getBoundingClientRect();
         next[el.dataset.fighter!] = {x: Math.round(r.left - b.left + r.width / 2), y: Math.round(r.top - b.top + r.height / 2)};
       });
-      setAnchors(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+      const obstacles = [...box.querySelectorAll<HTMLElement>('[data-obstacle]')].map(el => {
+        const r = el.getBoundingClientRect();
+        return {x: Math.round(r.left - b.left), y: Math.round(r.top - b.top), w: Math.round(r.width), h: Math.round(r.height)};
+      }).filter(r => r.w && r.h);
+      const value = {anchors: next, obstacles};
+      setState(prev => (JSON.stringify(prev) === JSON.stringify(value) ? prev : value));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     return () => ro.disconnect();
   });
-  return anchors;
+  return state;
 }
 
 const ARROW = {mine: '#5aa9ff', theirs: '#f0566a', ally: '#3ecf8e'};
@@ -730,21 +740,67 @@ function curve(a: Point, b: Point, bend: number) {
     return {x: p.x + (c.x - p.x) * k, y: p.y + (c.y - p.y) * k};
   };
   const s = pull(a, 46), e = pull(b, 58);
-  return {d: `M${s.x},${s.y} Q${c.x},${c.y} ${e.x},${e.y}`, mid: {x: (s.x + 2 * c.x + e.x) / 4, y: (s.y + 2 * c.y + e.y) / 4}};
+  const at = (t: number) => ({
+    x: (1 - t) ** 2 * s.x + 2 * (1 - t) * t * c.x + t ** 2 * e.x,
+    y: (1 - t) ** 2 * s.y + 2 * (1 - t) * t * c.y + t ** 2 * e.y,
+  });
+  return {d: `M${s.x},${s.y} Q${c.x},${c.y} ${e.x},${e.y}`, at};
+}
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+const textWidth = (text: string) => {
+  measureCtx ??= document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return text.length * 6.5;
+  measureCtx.font = '11px ui-sans-serif, system-ui, sans-serif';
+  return measureCtx.measureText(text).width;
+};
+const overlap = (a: Rect, b: Rect) =>
+  Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+/** Slide a label along its arrow to the spot that covers the least (names, chips, other labels). */
+function placeLabel(at: (t: number) => Point, w: number, h: number, taken: Rect[]): Point {
+  let best = at(0.5), cost = Infinity;
+  // On the line first, then a little above/below it if the line is crowded.
+  for (const dy of [0, -(h + 4), h + 4]) {
+    for (const t of [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82]) {
+      const q = at(t), p = {x: q.x, y: q.y + dy};
+      const r = {x: p.x - w / 2 - 3, y: p.y - h / 2 - 3, w: w + 6, h: h + 6};
+      // A little nudge towards the middle of the line so equally free spots keep the label centred.
+      const c = taken.reduce((sum, o) => sum + overlap(r, o), 0) + Math.abs(t - 0.5) * 40 + Math.abs(dy) * 1.5;
+      if (c < cost) { cost = c; best = p; }
+      if (c < 20) return best;
+    }
+  }
+  return best;
 }
 
 /** The planned attacks as arrows, labelled with the move and its damage; plus the one being drawn. */
-function Arrows({mat, sets, fighters, anchors, aim}: {mat: Playmat; sets: PokemonSet[]; fighters: Fighter[]; anchors: Record<string, Point>; aim: Aim | null}) {
+function Arrows({mat, sets, fighters, anchors, obstacles, aim}: {
+  mat: Playmat; sets: PokemonSet[]; fighters: Fighter[]; anchors: Record<string, Point>; obstacles: Rect[]; aim: Aim | null;
+}) {
   const byKey = Object.fromEntries(fighters.map(f => [f.key, f]));
+  const targetsOf = (f: Fighter) => {
+    const a = mat.actions?.[f.key];
+    if (!a) return [];
+    return (autoTargets(mat, sets, f, a.move) ?? a.targets).filter(t => byKey[t] && anchors[t] && t !== f.key);
+  };
+  const aimed = Object.fromEntries(fighters.map(f => [f.key, targetsOf(f)]));
+  const taken = [...obstacles];
   const arrows: {id: string; color: string; d: string; mid: Point; move: string; out: ReturnType<typeof matCalc>}[] = [];
   for (const f of fighters) {
     const a = mat.actions?.[f.key];
     if (!a || !anchors[f.key]) continue;
-    const targets = (autoTargets(mat, sets, f, a.move) ?? a.targets).filter(t => byKey[t] && anchors[t] && t !== f.key);
-    for (const t of targets) {
+    for (const t of aimed[f.key]) {
       const ally = byKey[t].side === f.side;
-      const {d, mid} = curve(anchors[f.key], anchors[t], ally ? 46 : 34);
+      // Two Pokémon hitting each other: bend both arrows wider so they don't lie on top of each other.
+      const mutual = aimed[t]?.includes(f.key);
+      const {d, at} = curve(anchors[f.key], anchors[t], ally ? 46 : mutual ? 62 : 34);
       const out = !ally && MOVES[a.move]?.cat !== 'Status' ? matCalc(mat, f, byKey[t], a.move) : null;
+      const ko = out ? koLabel({move: a.move, minPct: out.minPct, maxPct: out.maxPct, koText: out.koText, koN: out.koN, koChance: out.koChance}) : null;
+      const text = `${a.move}  ${out ? `${pct(out.minPct, 0)}–${pct(out.maxPct, 0)}  ${ko && ko.ko !== '—' ? ko.ko + (ko.chance ? ' ' + ko.chance : '') : ''}` : ''}`;
+      const w = textWidth(text) + 16, h = 20;
+      const mid = placeLabel(at, w, h, taken);
+      taken.push({x: mid.x - w / 2, y: mid.y - h / 2, w, h});
       arrows.push({id: `${f.key}-${t}`, color: ally ? ARROW.ally : ARROW[f.side], d, mid, move: a.move, out});
     }
   }
@@ -791,11 +847,14 @@ function Arrows({mat, sets, fighters, anchors, aim}: {mat: Playmat; sets: Pokemo
 /** The four moves under a Pokémon on the hotkey side; elsewhere just the planned one. */
 function MoveChips({set, action, hot, onPick, side}: {set: PokemonSet; action?: MatAction; hot: string | null; onPick: (n: number) => void; side: MatSide}) {
   const tint = side === 'mine' ? 'border-info/70 bg-info/15 text-ink' : 'border-bad/70 bg-bad/15 text-ink';
-  if (hot === null) {
-    return action ? <span className={`mt-1.5 rounded-md border px-2 py-0.5 text-[11px] ${tint}`}>{action.move}</span> : <span className="mt-1.5 h-[22px]" />;
-  }
+  const picked = action ? <span data-obstacle className={`mt-1.5 rounded-md border px-2 py-0.5 text-[11px] ${tint}`}>{action.move}</span> : null;
+  if (hot === null) return picked ?? <span className="mt-1.5 h-[22px]" />;
+  // Once a move is picked only it shows; hovering the Pokémon brings back all four.
   return (
-    <div className="mt-1.5 grid grid-cols-2 gap-1" onPointerDown={e => e.stopPropagation()}>
+    <div className="relative flex flex-col items-center">
+      {picked && <div className="group-hover/spot:invisible">{picked}</div>}
+    <div data-obstacle={picked ? undefined : ''} onPointerDown={e => e.stopPropagation()}
+      className={`mt-1.5 grid grid-cols-2 gap-1 ${picked ? 'invisible absolute top-0 z-20 rounded-lg bg-black/80 p-1 group-hover/spot:visible' : ''}`}>
       {set.moves.slice(0, 4).map((m, n) => (
         <button key={m + n} onClick={e => { e.stopPropagation(); onPick(n); }}
           className={`flex w-[104px] items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-left text-[10.5px] transition ${
@@ -805,6 +864,7 @@ function MoveChips({set, action, hot, onPick, side}: {set: PokemonSet; action?: 
           <span className="truncate">{m}</span>
         </button>
       ))}
+    </div>
     </div>
   );
 }
