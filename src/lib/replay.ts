@@ -47,6 +47,8 @@ export interface ReplayStep {
   hp: Record<string, number>;
   boosts: Record<string, Partial<Record<Stage, number>>>;
   field: ReplayField;
+  /** Pokémon that have Mega Evolved by now, "p1:3". */
+  megas: string[];
   moves: ReplayMove[];
   log: ReplayLine[];
   /** Pokémon that fainted during this step. */
@@ -126,6 +128,7 @@ export function parseReplay(log: string, id = '', format = ''): ParsedReplay {
   const boosts: Record<string, Partial<Record<Stage, number>>> = {};
   const field: ReplayField = {weather: '', terrain: '', trickRoom: false, tailwind: {p1: false, p2: false}, reflect: {p1: false, p2: false}, lightScreen: {p1: false, p2: false}};
   const steps: ReplayStep[] = [];
+  const megas: string[] = [];
   let winner: string | undefined;
 
   // The step being read, and the board frozen right before its first move.
@@ -157,7 +160,7 @@ export function parseReplay(log: string, id = '', format = ''): ParsedReplay {
     const act = clone(active);
     // Fainted Pokémon that weren't replaced leave an empty spot.
     for (const side of ['p1', 'p2'] as PSide[]) act[side] = act[side].map(i => (i !== null && hp[k(side, i)] === 0 ? null : i)) as [number | null, number | null];
-    cur.board = {active: act, hp: clone(hp), boosts: clone(boosts), field: clone(field)};
+    cur.board = {active: act, hp: clone(hp), boosts: clone(boosts), field: clone(field), megas: [...megas]};
   };
   const finish = () => {
     if (!cur) return;
@@ -226,14 +229,17 @@ export function parseReplay(log: string, id = '', format = ''): ParsedReplay {
         if (!brought[side].includes(index)) brought[side].push(index);
         last = null;
         const mega = speciesOf(a[1]);
-        if (SPECIES[mega]?.mega) revealed[side][index].mega = mega;
+        if (SPECIES[mega]?.mega) { revealed[side][index].mega = mega; if (!megas.includes(k(side, index))) megas.push(k(side, index)); }
         say(side, cur?.turn === 0 && !cur.board ? `Lead: ${name(side, index)}` : old !== null && hp[k(side, old)] > 0 ? `${name(side, old)} → ${name(side, index)}` : `${name(side, index)} comes in`, 'switch');
         break;
       }
       case 'detailschange': {
         const p = who(a[0]);
         const sp = speciesOf(a[1]);
-        if (p && SPECIES[sp]?.mega) revealed[p.side][p.index].mega = sp;
+        if (p && SPECIES[sp]?.mega) {
+          revealed[p.side][p.index].mega = sp;
+          if (!megas.includes(k(p.side, p.index))) megas.push(k(p.side, p.index));
+        }
         break;
       }
       case '-mega': {
@@ -501,6 +507,7 @@ export function showStep(mat: Playmat, n: number): Playmat {
     mine: step.active[me],
     theirs: step.active[them],
     hp, boosts, actions,
+    megas: Object.fromEntries((step.megas ?? []).map(rk => { const [s, i] = rk.split(':'); return [key(s as PSide, +i), true]; })),
     field: {
       weather: f.weather, terrain: f.terrain, trickRoom: f.trickRoom,
       tailwind: {mine: f.tailwind[me], theirs: f.tailwind[them]},

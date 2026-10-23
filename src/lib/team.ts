@@ -13,6 +13,8 @@ export interface PokemonSet {
   moves: string[];
   /** Stats whose SP the planning tabs must not change. */
   locked?: StatID[];
+  /** On the Playmat: holds its Mega Stone but hasn't Mega Evolved (yet). */
+  unevolved?: boolean;
 }
 
 export interface Team {
@@ -62,6 +64,8 @@ export interface Playmat {
   notes: MatNote[];
   /** Planned move per Pokémon on the field (keyed like hp) and whom it hits. */
   actions?: Record<string, MatAction>;
+  /** Which Pokémon have Mega Evolved, keyed like hp (missing on older mats: every stone holder has). */
+  megas?: Record<string, boolean>;
   /** Set when the mat plays back a Showdown replay. */
   replay?: ReplayMat;
 }
@@ -79,7 +83,7 @@ export interface MatAction {
 export const emptySps = (): StatTable => ({hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0});
 
 /** Forme the set actually battles as (its Mega forme if it holds the stone). */
-export const battleForme = (set: PokemonSet) => megaForme(set.species, set.item) ?? set.species;
+export const battleForme = (set: PokemonSet) => (set.unevolved ? undefined : megaForme(set.species, set.item)) ?? set.species;
 
 export function calcStat(base: number, stat: StatID, sp: number, nature: string): number {
   if (stat === 'hp') return base === 1 ? 1 : base + sp + 75;

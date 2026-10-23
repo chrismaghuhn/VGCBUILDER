@@ -3,7 +3,7 @@ import {SPECIES, TYPE_COLOR, MOVES, pct, type UsageSource} from '../lib/data';
 import {WEATHER_LABEL, teamField} from '../lib/analysis';
 import {metaSet} from '../lib/calc';
 import {leadAdvice, rankPlans} from '../lib/matchup';
-import {activeFighters, autoTargets, keyOf, matCalc, matHits, newPlaymat, planMove, turnOrder, type Fighter} from '../lib/playmat';
+import {activeFighters, autoTargets, canMega, keyOf, matSet, toggleMega, matCalc, matHits, newPlaymat, planMove, turnOrder, type Fighter} from '../lib/playmat';
 import {fetchReplay, guessMe, parseReplay, replayId, replayPerspective, replayPlaymat, showStep, type ParsedReplay, type PSide} from '../lib/replay';
 import {decodeShare, fetchPokepaste, pokepasteId, sharePayload} from '../lib/share';
 import {battleForme, importTeam, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
@@ -268,7 +268,8 @@ export function PlaymatView({sets: mySets, usage, mat, onChange}: {
           {([0, 1] as const).map(spot => (
             <Spot key={spot} side="theirs" spot={spot} index={mat.theirs[spot]} mat={mat} sets={sets} selected={selected}
               onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 17}
-              hot={aimSide === 'theirs' ? (spot ? '⇧' : '') : null} onPick={n => chooseMove('theirs', spot, n)} />
+              hot={aimSide === 'theirs' ? (spot ? '⇧' : '') : null} onPick={n => chooseMove('theirs', spot, n)}
+              onMega={() => { const i = mat.theirs[spot]; if (i !== null) set({megas: toggleMega(mat, sets, keyOf('theirs', i))}); }} />
           ))}
         </div>
 
@@ -290,7 +291,8 @@ export function PlaymatView({sets: mySets, usage, mat, onChange}: {
           {([0, 1] as const).map(spot => (
             <Spot key={spot} side="mine" spot={spot} index={mat.mine[spot]} mat={mat} sets={sets} selected={selected}
               onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 23}
-              hot={aimSide === 'mine' ? (spot ? '⇧' : '') : null} onPick={n => chooseMove('mine', spot, n)} />
+              hot={aimSide === 'mine' ? (spot ? '⇧' : '') : null} onPick={n => chooseMove('mine', spot, n)}
+              onMega={() => { const i = mat.mine[spot]; if (i !== null) set({megas: toggleMega(mat, sets, keyOf('mine', i))}); }} />
           ))}
         </div>
 
@@ -378,7 +380,7 @@ export function PlaymatView({sets: mySets, usage, mat, onChange}: {
       )}
       </div>
 
-      {drag && <DragGhost drag={drag} set={drag.side === 'mine' ? sets[drag.index] : mat.opp[drag.index]} />}
+      {drag && <DragGhost drag={drag} set={matSet(mat, keyOf(drag.side, drag.index), drag.side === 'mine' ? sets[drag.index] : mat.opp[drag.index])} />}
     </section>
   );
 }
@@ -526,7 +528,7 @@ function Bench({side, ids, mat, sets, selected, onSelect, drag, onGrab, onToggle
                 onClick={e => { e.stopPropagation(); onSelect(key); }}
                 className={`flex cursor-grab touch-none select-none flex-col items-center rounded-lg px-1.5 pt-1 transition active:cursor-grabbing ${selected === key ? 'bg-gold/15' : 'hover:bg-white/5'} ${active || (drag?.side === side && drag.index === i) ? 'opacity-40' : ''}`}
                 title={active ? 'On the field' : 'Drag onto a spot'}>
-                <div className="flex h-14 items-end"><Sprite name={battleForme(list[i])} facing={side === 'mine' ? 'up' : 'down'} fit={56} offset={k * 13} /></div>
+                <div className="flex h-14 items-end"><Sprite name={battleForme(matSet(mat, key, list[i]))} facing={side === 'mine' ? 'up' : 'down'} fit={56} offset={k * 13} /></div>
                 <span className="text-[11px] text-dim">{list[i].species}</span>
               </button>
               {side === 'mine' && (
@@ -542,13 +544,14 @@ function Bench({side, ids, mat, sets, selected, onSelect, drag, onGrab, onToggle
   );
 }
 
-function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, offset, hot, onPick}: {
+function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, offset, hot, onPick, onMega}: {
   side: MatSide; spot: 0 | 1; index: number | null; mat: Playmat; sets: PokemonSet[]; selected: string | null;
   onSelect: (k: string) => void; drag: Drag | null; onGrab: Grab; offset: number;
   /** Hotkey prefix when 1-4 picks for this side ('' left, '⇧' right), else null. */
-  hot: string | null; onPick: (n: number) => void;
+  hot: string | null; onPick: (n: number) => void; onMega: () => void;
 }) {
-  const set = index === null ? null : side === 'mine' ? sets[index] : mat.opp[index];
+  const raw = index === null ? null : side === 'mine' ? sets[index] : mat.opp[index];
+  const set = raw && index !== null ? matSet(mat, keyOf(side, index), raw) : null;
   const ring = side === 'mine' ? '90,169,255' : '240,86,106';
   const key = index === null ? '' : keyOf(side, index);
   const hp = mat.hp[key] ?? 100;
@@ -571,7 +574,16 @@ function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, o
             {over && !self && !drag.fromSpot && <span className="absolute top-1 rounded bg-black/60 px-1.5 text-[10.5px] text-gold">replace</span>}
             <div data-obstacle className={`relative -mb-1.5 transition ${self ? 'opacity-30' : over ? 'opacity-50' : ''}`}><Sprite name={battleForme(set)} facing={side === 'mine' ? 'up' : 'down'} scale={3} fit={140} offset={offset} /></div>
           </div>
-          <span data-obstacle className="mt-1.5 font-display text-[15px] font-semibold">{set.species}</span>
+          <span data-obstacle className="mt-1.5 flex items-center gap-1.5 font-display text-[15px] font-semibold">
+            {set.species}
+            {canMega(raw!) && (
+              <span role="button" tabIndex={0} onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); onMega(); }}
+                title={set.unevolved ? 'Mega Evolve (one per side and battle)' : 'Mega Evolved: click to undo'}
+                className={`rounded px-1 font-display text-[10px] font-bold leading-[15px] transition ${
+                  set.unevolved ? 'border border-gold/50 text-gold/80 hover:bg-gold/15' : 'border border-gold bg-gold text-[#1a1406]'}`}>M</span>
+            )}
+          </span>
           <div data-obstacle className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-black/40">
             <div className="h-full rounded-full" style={{width: `${hp}%`, background: hp > 50 ? 'var(--color-good)' : hp > 20 ? 'var(--color-warn)' : 'var(--color-bad)'}} />
           </div>
