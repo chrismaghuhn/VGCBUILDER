@@ -25,6 +25,8 @@ export interface Match {
   replay?: string;
   /** My side in that replay. */
   side?: PSide;
+  /** The Playmat board saved with it (turn notes, plans). */
+  board?: string;
 }
 
 export const ARCHETYPES = ['Rain', 'Sun', 'Sand', 'Snow', 'Trick Room', 'Tailwind', 'Balance'];

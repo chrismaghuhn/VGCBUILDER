@@ -37,8 +37,15 @@ export function useStore() {
   const [past, setPast] = useState<Saved[]>([]);
   const lastPush = useRef({at: 0, key: ''});
 
+  // Saving can fail when the browser's storage is full; say so instead of losing changes silently.
+  const [saveError, setSaveError] = useState(false);
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+      setSaveError(false);
+    } catch {
+      setSaveError(true);
+    }
   }, [state]);
 
   // Mirror of the latest state so commits never run side effects inside updaters (StrictMode runs those twice).
@@ -86,12 +93,34 @@ export function useStore() {
     team,
     source: state.source,
     canUndo: past.length > 0,
+    saveError,
     undo,
     setSource: (source: string) => setState(s => ({...s, source})),
     setSets,
     rename: (name: string) => updateTeam(t => ({...t, name}), 'rename'),
     setSuggestPrefs: (patch: Pick<Team, 'hidden' | 'noMegas'>) => updateTeam(t => ({...t, ...patch})),
-    setPlaymat: (m: Team['playmat'], key?: string) => updateTeam(t => ({...t, playmat: m}), key),
+    /** Show a board; it's kept in the team's board list too, so nothing is lost when another one opens. */
+    setPlaymat: (m: Team['playmat'], key?: string) => updateTeam(t => {
+      if (!m) return {...t, playmat: undefined};
+      const mat = m.id ? m : {...m, id: newId()};
+      const boards = t.boards ?? [];
+      const old = boards.find(b => b.id === mat.id);
+      // Unchanged boards keep their timestamp, so a no-op stays a no-op (no empty undo step).
+      if (old && JSON.stringify(old.mat) === JSON.stringify(mat)) return {...t, playmat: mat};
+      const entry = {id: mat.id!, savedAt: Date.now(), mat};
+      return {...t, playmat: mat, boards: [entry, ...boards.filter(b => b.id !== mat.id)]};
+    }, key),
+    renameBoard: (id: string, name: string) => updateTeam(t => ({
+      ...t,
+      boards: (t.boards ?? []).map(b => (b.id === id ? {...b, mat: {...b.mat, name}} : b)),
+      playmat: t.playmat?.id === id ? {...t.playmat, name} : t.playmat,
+    }), `rename-board-${id}`),
+    deleteBoard: (id: string) => updateTeam(t => ({
+      ...t,
+      boards: (t.boards ?? []).filter(b => b.id !== id),
+      // Deleting the open board closes it.
+      playmat: t.playmat?.id === id ? undefined : t.playmat,
+    })),
     setMatches: (fn: (m: NonNullable<Team['matches']>) => NonNullable<Team['matches']>, key?: string) =>
       updateTeam(t => ({...t, matches: fn(t.matches ?? [])}), key),
     select: (id: string) => setState(s => ({...s, activeId: id})),

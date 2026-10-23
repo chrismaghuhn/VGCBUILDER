@@ -147,6 +147,12 @@ export default function App() {
         </div>
       </header>
 
+      {store.saveError && (
+        <div className="mb-4 border border-bad/60 bg-bad/10 px-3 py-2 text-[12.5px] text-bad">
+          Your browser's storage is full, so the latest changes aren't saved. Delete old boards on the Playmat (Boards) to make room.
+        </div>
+      )}
+
       {/* Team row: shared by all pages except the Playmat (team is on the board) and Matches (a log, not editing) */}
       {page !== 'playmat' && page !== 'matches' && (
         <div className="panel mb-5 p-3">
@@ -237,6 +243,7 @@ export default function App() {
       {page === 'playmat' && (
         <PlaymatView sets={sets} usage={usage} mat={team.playmat} onChange={store.setPlaymat}
           savedReplays={(team.matches ?? []).map(m => m.replay ?? '')}
+          boards={team.boards} onRenameBoard={store.renameBoard} onDeleteBoard={store.deleteBoard}
           onSaveMatch={m => store.setMatches(ms => [...ms, m])} />
       )}
       {page === 'matches' && (
@@ -244,6 +251,9 @@ export default function App() {
           teams={store.teams.map(t => ({id: t.id, name: t.name, games: t.matches?.length ?? 0}))} teamId={team.id} onTeam={store.select}
           playmatOpp={team.playmat && !team.playmat.replay ? team.playmat.opp : undefined}
           onOpenReplay={async m => {
+            // The board saved with the game has its turn notes and plans; fetch the replay only without it.
+            const board = m.board && team.boards?.find(b => b.id === m.board);
+            if (board) { store.setPlaymat(board.mat); setPage('playmat'); return; }
             if (!m.replay) return;
             try {
               const r = await fetchReplay(m.replay);
@@ -274,12 +284,13 @@ export default function App() {
           teamName={team.name}
           onClose={() => { setSharedMat(null); history.replaceState(null, '', `${location.pathname}#playmat`); setPageState('playmat'); }}
           onOpen={async shared => {
-            let mat: Playmat = shared.mat;
+            // A shared board always becomes a new board here, never overwrites one with the same id.
+            let mat: Playmat = {...shared.mat, id: undefined};
             if (shared.replay) {
               // Replays travel as their id: fetch the battle again and lay it out at the same turn.
               const r = await fetchReplay(shared.replay.id);
               const m = showStep(replayPlaymat(r, shared.replay.me, shared.mat.team ?? [], usage, shared.replay.turnNotes), shared.replay.step);
-              mat = {...m, notes: shared.mat.notes, plans: shared.mat.plans};
+              mat = {...m, id: undefined, notes: shared.mat.notes, plans: shared.mat.plans};
             }
             store.setPlaymat(mat);
           }}

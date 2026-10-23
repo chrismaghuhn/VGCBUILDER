@@ -30,6 +30,15 @@ export interface Team {
   playmat?: Playmat;
   /** Played games (match log). */
   matches?: Match[];
+  /** Every Playmat board of this team, newest first; the open one is mirrored here on every change. */
+  boards?: SavedBoard[];
+}
+
+export interface SavedBoard {
+  id: string;
+  /** Last change, ms since epoch. */
+  savedAt: number;
+  mat: Playmat;
 }
 
 export type MatSide = 'mine' | 'theirs';
@@ -53,6 +62,8 @@ export interface MatNote {
 }
 
 export interface Playmat {
+  /** Identifies the board in the team's board list; a mat without one is new. */
+  id?: string;
   name: string;
   opp: PokemonSet[];
   /** Who stands on the two battle spots per side (index into my team / opp, null = empty). */
