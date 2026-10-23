@@ -149,7 +149,7 @@ export default function App() {
             <button
               key={p.key}
               onClick={() => { if (p.key === 'teams') setTeamOpen(false); setPage(p.key); }}
-              className={`relative rounded-lg px-4 py-1.5 font-display text-[13px] font-semibold uppercase tracking-wider transition ${page === p.key ? 'bg-gold text-black' : 'text-dim hover:bg-panel-2 hover:text-ink'}`}
+              className={`relative rounded-lg px-3 py-1.5 font-display text-[13px] font-semibold uppercase tracking-wider transition ${page === p.key ? 'bg-gold text-black' : 'text-dim hover:bg-panel-2 hover:text-ink'}`}
             >
               {p.label}
               {p.key === 'analyse' && errorCount > 0 && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-bad" />}
@@ -180,23 +180,31 @@ export default function App() {
         <div className="panel mb-5 p-3">
           <div className="mb-2.5 flex flex-wrap items-center gap-2">
             {editing && <button className="text-[12.5px] text-dim hover:text-ink" onClick={() => setTeamOpen(false)}>← All teams</button>}
-            {!editing && store.teams.length > 1 && (
-              <select
-                className="field !w-auto !py-1 text-xs text-dim"
-                value=""
-                onChange={e => { store.select(e.target.value); setSelected(0); }}
-                title="Switch team"
-              >
-                <option value="" disabled>Teams ({store.teams.length})</option>
-                {store.teams.map(t => <option key={t.id} value={t.id}>{t.id === team.id ? '● ' : ''}{t.name}</option>)}
-              </select>
+            {editing ? (
+              <input
+                className="min-w-0 flex-1 bg-transparent px-1 font-display text-lg font-semibold tracking-wide outline-none placeholder:text-faint focus:text-gold"
+                value={team.name}
+                onChange={e => store.rename(e.target.value)}
+                aria-label="Team name"
+              />
+            ) : (
+              // Outside the editor the name is the team switcher; renaming happens in the editor.
+              <span className="flex min-w-0 flex-1 items-center">
+                {store.teams.length > 1 ? (
+                  // The name with ▾ right after it; an invisible select on top does the switching.
+                  <span className="relative flex min-w-0 items-center gap-1.5 border border-transparent px-1 hover:border-line-2">
+                    <span className="truncate font-display text-lg font-semibold tracking-wide">{team.name || 'Untitled'}</span>
+                    <span className="text-[11px] text-dim">▾</span>
+                    <select className="absolute inset-0 cursor-pointer opacity-0" value={team.id}
+                      onChange={e => { store.select(e.target.value); setSelected(0); }} title="Switch team" aria-label="Switch team">
+                      {store.teams.map(t => <option key={t.id} value={t.id}>{t.name || 'Untitled'}</option>)}
+                    </select>
+                  </span>
+                ) : (
+                  <span className="truncate px-1 font-display text-lg font-semibold tracking-wide">{team.name}</span>
+                )}
+              </span>
             )}
-            <input
-              className="min-w-0 flex-1 bg-transparent px-1 font-display text-lg font-semibold tracking-wide outline-none placeholder:text-faint focus:text-gold"
-              value={team.name}
-              onChange={e => store.rename(e.target.value)}
-              aria-label="Team name"
-            />
             {editing && <TeamHeaderMeta team={team} folders={store.folders} onMeta={patch => store.setTeamMeta(team.id, patch)} />}
             <CheckBar sets={sets} errors={errorCount} onClick={() => setPage('analyse')} />
             {vsPage && (
