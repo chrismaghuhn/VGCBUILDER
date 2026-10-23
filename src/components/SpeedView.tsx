@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {STAT_LABEL, type UsageSource} from '../lib/data';
 import {effectiveSpeed, metaSpeeds, teamField, teamSpeeds, type SpeedEntry, type SpeedField} from '../lib/analysis';
 import {applySpeed, speedNeed, type SpeedNeed} from '../lib/speed';
@@ -46,6 +46,15 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet, onStep}:
     for (const r of rows) if (!r.mine) m.set(r.name, speedNeed(me, r.target, field, trickRoom));
     return m;
   }, [me, rows, trickRoom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the picked Pokémon in the middle of the list, so the closest speeds above and below are visible.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    const row = list?.querySelector<HTMLElement>('[data-selected]');
+    if (!list || !row) return;
+    list.scrollTo({top: row.offsetTop - list.clientHeight / 2 + row.clientHeight / 2, behavior: 'smooth'});
+  }, [sel, rows]);
 
   if (!sets.length) return <Empty />;
 
@@ -95,7 +104,7 @@ export function SpeedView({sets, usage, weather, selected, onUpdateSet, onStep}:
             <span className="text-dim"><b>{counts.rest}</b> out of reach</span>
           </div>
         )}
-        <div className="max-h-[640px] overflow-y-auto pr-1">
+        <div ref={listRef} className="relative max-h-[640px] overflow-y-auto pr-1">
           {rows.map((r, i) => (
             <Row
               key={r.name + i + r.mine}
@@ -130,7 +139,7 @@ function Row({r, max, isMeta, isSelected, need, trickRoom, onApply, me, detailed
   me?: PokemonSet;
 }) {
   return (
-    <div className={`flex items-center gap-2.5 border-b border-line/50 py-1 ${r.mine ? 'bg-gold/[.06] text-gold' : ''} ${isSelected ? 'outline outline-1 outline-gold/60' : ''}`}>
+    <div data-selected={isSelected || undefined} className={`flex items-center gap-2.5 border-b border-line/50 py-1 ${r.mine ? 'bg-gold/[.06] text-gold' : ''} ${isSelected ? 'outline outline-1 outline-gold/60' : ''}`}>
       <Portrait name={r.name} size={22} className="!rounded" />
       <span className={`flex w-44 min-w-0 items-center gap-1.5 text-[13px] ${r.mine ? 'font-semibold' : ''}`}>
         <span className="truncate">{r.name}</span>
