@@ -141,8 +141,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Team row: shared by all pages except the Playmat, where the team is on the board */}
-      {page !== 'playmat' && (
+      {/* Team row: shared by all pages except the Playmat (team is on the board) and Matches (a log, not editing) */}
+      {page !== 'playmat' && page !== 'matches' && (
         <div className="panel mb-5 p-3">
           <div className="mb-2.5 flex flex-wrap items-center gap-2">
             {store.teams.length > 1 && (
@@ -235,6 +235,7 @@ export default function App() {
       )}
       {page === 'matches' && (
         <MatchesView sets={sets} usage={usage} matches={team.matches ?? []} onChange={store.setMatches}
+          teams={store.teams.map(t => ({id: t.id, name: t.name, games: t.matches?.length ?? 0}))} teamId={team.id} onTeam={store.select}
           playmatOpp={team.playmat && !team.playmat.replay ? team.playmat.opp : undefined}
           onOpenReplay={async m => {
             if (!m.replay) return;

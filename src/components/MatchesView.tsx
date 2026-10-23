@@ -10,7 +10,11 @@ import {Combobox, Portrait, Section} from './ui';
 type Role = 'lead' | 'back' | null;
 
 /** Match log of the active team: quick capture (or from a replay), the list, and win rates. */
-export function MatchesView({sets, usage, matches, onChange, playmatOpp, onOpenReplay}: {
+export function MatchesView({sets, usage, matches, onChange, playmatOpp, onOpenReplay, teams, teamId, onTeam}: {
+  /** All teams, to switch whose log is shown. */
+  teams: {id: string; name: string; games: number}[];
+  teamId: string;
+  onTeam: (id: string) => void;
   sets: PokemonSet[];
   usage: UsageSource;
   matches: Match[];
@@ -41,6 +45,15 @@ export function MatchesView({sets, usage, matches, onChange, playmatOpp, onOpenR
   };
 
   return (
+    <div className="space-y-4">
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="label">Match log of</span>
+      <select className="field !w-auto !py-1 font-display text-[15px] font-semibold" value={teamId}
+        onChange={e => { onTeam(e.target.value); setDraft(emptyMatch()); setEditing(false); }}>
+        {teams.map(t => <option key={t.id} value={t.id}>{t.name}{t.games ? ` (${t.games})` : ''}</option>)}
+      </select>
+      <span className="flex gap-0.5">{sets.map(s => <Portrait key={s.species} name={s.species} size={26} />)}</span>
+    </div>
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
       <div className="min-w-0 space-y-4">
         <Section title={editing ? 'Edit match' : 'Add a match'}
@@ -80,6 +93,7 @@ export function MatchesView({sets, usage, matches, onChange, playmatOpp, onOpenR
           </>
         )}
       </div>
+    </div>
     </div>
   );
 }
