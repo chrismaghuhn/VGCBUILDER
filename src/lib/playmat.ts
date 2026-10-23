@@ -1,10 +1,34 @@
-import {MOVES, type UsageSource} from './data';
+import {MOVES, megaForme, type UsageSource} from './data';
 import {abilityOf, effectiveSpeed, teamField, type SpeedField} from './analysis';
 import {runCalc, type CalcOut, type FieldOpts} from './calc';
 import {rankPlans} from './matchup';
 import type {MatAction, MatSide, Playmat, PokemonSet} from './team';
 
 export const keyOf = (side: MatSide, i: number) => `${side === 'mine' ? 'm' : 't'}${i}`;
+
+/** Holds a Mega Stone for its species. */
+export const canMega = (set: PokemonSet) => !!megaForme(set.species, set.item);
+
+/** A set as it stands on the mat: a stone holder that hasn't Mega Evolved yet keeps its base forme. */
+export function matSet(mat: Playmat, key: string, set: PokemonSet): PokemonSet {
+  if (!canMega(set)) return set;
+  const evolved = mat.megas ? !!mat.megas[key] : true;
+  return evolved ? set : {...set, unevolved: true};
+}
+
+/** Mega Evolve (or undo) `key`; only one Mega per side and battle. */
+export function toggleMega(mat: Playmat, sets: PokemonSet[], key: string): Record<string, boolean> {
+  const prefix = key[0];
+  // Older mats without the record: every stone holder counted as evolved.
+  const megas: Record<string, boolean> = mat.megas ? {...mat.megas} : Object.fromEntries([
+    ...sets.map((s, i) => [keyOf('mine', i), canMega(s)] as const),
+    ...mat.opp.map((s, i) => [keyOf('theirs', i), canMega(s)] as const),
+  ]);
+  const on = !megas[key];
+  if (on) for (const k of Object.keys(megas)) if (k[0] === prefix) megas[k] = false;
+  megas[key] = on;
+  return megas;
+}
 
 /** A fresh board: their most likely leads vs my best plan, my team's weather. */
 export function newPlaymat(name: string, opp: PokemonSet[], sets: PokemonSet[], usage: UsageSource): Playmat {
@@ -25,6 +49,11 @@ export function newPlaymat(name: string, opp: PokemonSet[], sets: PokemonSet[], 
       tailwind: {mine: false, theirs: false}, reflect: {mine: false, theirs: false}, lightScreen: {mine: false, theirs: false},
     },
     notes: [],
+    // The first lead holding a stone Mega Evolves; anyone else waits.
+    megas: Object.fromEntries([
+      ...[best?.lead[0] ?? 0, best?.lead[1] ?? 1].filter(i => sets[i] && canMega(sets[i])).slice(0, 1).map(i => [keyOf('mine', i), true]),
+      ...theirLeads.filter(j => opp[j] && canMega(opp[j])).slice(0, 1).map(j => [keyOf('theirs', j), true]),
+    ]),
   };
 }
 
@@ -38,8 +67,8 @@ export interface Fighter {
 /** The (up to) four Pokémon on the battle spots. */
 export function activeFighters(mat: Playmat, sets: PokemonSet[]): Fighter[] {
   const out: Fighter[] = [];
-  mat.mine.forEach(i => { if (i !== null && sets[i]) out.push({side: 'mine', index: i, set: sets[i], key: keyOf('mine', i)}); });
-  mat.theirs.forEach(j => { if (j !== null && mat.opp[j]) out.push({side: 'theirs', index: j, set: mat.opp[j], key: keyOf('theirs', j)}); });
+  mat.mine.forEach(i => { if (i !== null && sets[i]) out.push({side: 'mine', index: i, set: matSet(mat, keyOf('mine', i), sets[i]), key: keyOf('mine', i)}); });
+  mat.theirs.forEach(j => { if (j !== null && mat.opp[j]) out.push({side: 'theirs', index: j, set: matSet(mat, keyOf('theirs', j), mat.opp[j]), key: keyOf('theirs', j)}); });
   return out;
 }
 
