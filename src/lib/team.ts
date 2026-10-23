@@ -59,6 +59,14 @@ export interface Playmat {
   boosts: Record<string, Partial<Record<'atk' | 'def' | 'spa' | 'spd' | 'spe', number>>>;
   field: MatField;
   notes: MatNote[];
+  /** Planned move per Pokémon on the field (keyed like hp) and whom it hits. */
+  actions?: Record<string, MatAction>;
+}
+
+export interface MatAction {
+  move: string;
+  /** Fighter keys it hits; empty = not aimed yet (or a move without a target). */
+  targets: string[];
 }
 
 export const emptySps = (): StatTable => ({hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0});

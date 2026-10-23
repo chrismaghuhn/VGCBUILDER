@@ -1,8 +1,8 @@
 import {MOVES, type UsageSource} from './data';
-import {effectiveSpeed, teamField, type SpeedField} from './analysis';
+import {abilityOf, effectiveSpeed, teamField, type SpeedField} from './analysis';
 import {runCalc, type CalcOut, type FieldOpts} from './calc';
 import {rankPlans} from './matchup';
-import type {MatSide, Playmat, PokemonSet} from './team';
+import type {MatAction, MatSide, Playmat, PokemonSet} from './team';
 
 export const keyOf = (side: MatSide, i: number) => `${side === 'mine' ? 'm' : 't'}${i}`;
 
@@ -56,11 +56,54 @@ export function speedOn(mat: Playmat, f: Fighter): number {
   return effectiveSpeed(f.set, speedField(mat, f), f.side === 'mine').speed;
 }
 
-/** Move order of the Pokémon on the field (Trick Room reverses it). */
+/** Priority of a planned move, with the abilities that change it. */
+export function priorityOf(mat: Playmat, f: Fighter, move?: string): number {
+  const m = move ? MOVES[move] : undefined;
+  if (!m) return 0;
+  const ability = abilityOf(f.set);
+  let prio = m.prio ?? 0;
+  if (ability === 'Prankster' && m.cat === 'Status') prio += 1;
+  if (ability === 'Gale Wings' && m.type === 'Flying' && (mat.hp[f.key] ?? 100) >= 100) prio += 1;
+  if (ability === 'Triage' && m.flags?.includes('heal')) prio += 3;
+  return prio;
+}
+
+/** Move order of the Pokémon on the field: priority first, then speed (Trick Room reverses speed). */
 export function turnOrder(mat: Playmat, sets: PokemonSet[]) {
-  const list = activeFighters(mat, sets).map(f => ({...f, speed: speedOn(mat, f)}));
-  list.sort((a, b) => (mat.field.trickRoom ? a.speed - b.speed : b.speed - a.speed));
-  return list.map((f, k) => ({...f, tie: list.some((g, m) => m !== k && g.speed === f.speed)}));
+  const list = activeFighters(mat, sets).map(f => {
+    const move = mat.actions?.[f.key]?.move;
+    return {...f, speed: speedOn(mat, f), move, prio: priorityOf(mat, f, move)};
+  });
+  list.sort((a, b) => b.prio - a.prio || (mat.field.trickRoom ? a.speed - b.speed : b.speed - a.speed));
+  return list.map((f, k) => ({...f, tie: list.some((g, m) => m !== k && g.speed === f.speed && g.prio === f.prio)}));
+}
+
+/** Move targets that need no aiming. */
+const NO_AIM = new Set(['self', 'allySide', 'foeSide', 'all', 'allies', 'allyTeam', 'adjacentAllyOrSelf']);
+
+/**
+ * Whom a move hits without aiming: spread moves both foes (and the partner), Helping Hand the partner,
+ * self/field moves nobody. null = a single target that the player aims.
+ */
+export function autoTargets(mat: Playmat, sets: PokemonSet[], f: Fighter, move: string): string[] | null {
+  const target = MOVES[move]?.target ?? 'normal';
+  const field = activeFighters(mat, sets);
+  const foes = field.filter(g => g.side !== f.side).map(g => g.key);
+  const ally = field.filter(g => g.side === f.side && g.key !== f.key).map(g => g.key);
+  if (target === 'allAdjacentFoes') return foes;
+  if (target === 'allAdjacent') return [...foes, ...ally];
+  if (target === 'adjacentAlly') return ally;
+  if (NO_AIM.has(target)) return [];
+  return null;
+}
+
+/** Plan `move` for `f`: spread/self moves aim themselves, single targets keep their old aim if it still stands. */
+export function planMove(mat: Playmat, sets: PokemonSet[], f: Fighter, move: string): MatAction {
+  const auto = autoTargets(mat, sets, f, move);
+  if (auto) return {move, targets: auto};
+  const onField = new Set(activeFighters(mat, sets).map(g => g.key));
+  const prev = (mat.actions?.[f.key]?.targets ?? []).filter(k => onField.has(k) && k !== f.key);
+  return {move, targets: prev.slice(0, 1)};
 }
 
 /** One attack with the board's field state, boosts and the defender's current HP. */

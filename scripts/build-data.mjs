@@ -9,6 +9,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {transform} from 'esbuild';
 
 const require = createRequire(import.meta.url);
+const {Dex: pkmnDex} = require('@pkmn/dex');
 const {Generations} = require('@smogon/calc');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -177,7 +178,8 @@ async function main() {
       type: m.type,
       cat: m.category,
       bp: m.basePower,
-      target: m.target,
+      // The calc's data only knows spread targets; Showdown's dex has all of them.
+      target: m.target || pkmnDex.moves.get(m.name)?.target,
       prio: m.priority || undefined,
       flags: Object.keys(m.flags || {}).length ? Object.keys(m.flags) : undefined,
       multihit: m.multihit,

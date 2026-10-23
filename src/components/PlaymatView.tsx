@@ -1,11 +1,11 @@
-import {useMemo, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {SPECIES, TYPE_COLOR, MOVES, pct, type UsageSource} from '../lib/data';
 import {WEATHER_LABEL, teamField} from '../lib/analysis';
 import {metaSet} from '../lib/calc';
 import {leadAdvice, rankPlans} from '../lib/matchup';
-import {activeFighters, keyOf, matHits, newPlaymat, turnOrder, type Fighter} from '../lib/playmat';
+import {activeFighters, autoTargets, keyOf, matCalc, matHits, newPlaymat, planMove, turnOrder, type Fighter} from '../lib/playmat';
 import {decodeShare, fetchPokepaste, pokepasteId, sharePayload} from '../lib/share';
-import {battleForme, importTeam, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
+import {battleForme, importTeam, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {koLabel} from './MetaView';
 import {speciesOptions} from './SetEditor';
@@ -26,6 +26,19 @@ export function PlaymatView({sets, usage, mat, onChange}: {
   const [selected, setSelected] = useState<string | null>(null);
   const [panel, setPanel] = useState<'suggest' | 'help' | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  // Moves: 1-4 / Shift+1-4 pick for the left / right Pokémon of `aimSide`, Tab switches sides.
+  const [aimSide, setAimSide] = useState<MatSide>('mine');
+  const [lastPicked, setLastPicked] = useState<string | null>(null);
+  const [aim, setAim] = useState<Aim | null>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const anchors = useAnchors(fieldRef);
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => keyRef.current(e);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+  keyRef.current = () => {};
   const ranked = useMemo(
     () => (mat && sets.length ? rankPlans(sets, mat.opp, usage, {weather: teamField(sets).weather}) : null),
     [sets, mat?.opp, usage], // eslint-disable-line react-hooks/exhaustive-deps
@@ -100,6 +113,76 @@ export function PlaymatView({sets, usage, mat, onChange}: {
     set({brought: b.slice(-4)});
   };
 
+  /** Pick move `n` (0-3) for the Pokémon on `spot` of `side`; picking it again clears it. */
+  const chooseMove = (side: MatSide, spot: 0 | 1, n: number) => {
+    const idx = mat[side][spot];
+    const f = idx === null ? null : fighterByKey(mat, sets, keyOf(side, idx));
+    const move = f?.set.moves[n];
+    if (!f || !move) return;
+    const actions = {...mat.actions};
+    if (actions[f.key]?.move === move) delete actions[f.key];
+    else actions[f.key] = planMove(mat, sets, f, move);
+    setLastPicked(f.key);
+    set({actions});
+  };
+
+  keyRef.current = e => {
+    if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Tab') { e.preventDefault(); setAimSide(s => (s === 'mine' ? 'theirs' : 'mine')); return; }
+    const m = /^Digit([1-4])$/.exec(e.code);
+    if (!m) return;
+    e.preventDefault();
+    chooseMove(aimSide, e.shiftKey ? 1 : 0, +m[1] - 1);
+  };
+
+  /** The Pokémon under the cursor, else the nearest one within reach. */
+  const fighterAt = (x: number, y: number): string | null => {
+    const el = document.elementFromPoint(x, y)?.closest('[data-fighter]') as HTMLElement | null;
+    if (el?.dataset.fighter) return el.dataset.fighter;
+    const box = fieldRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    let best: string | null = null, dist = 110;
+    for (const [k, p] of Object.entries(anchors)) {
+      const d = Math.hypot(x - box.left - p.x, y - box.top - p.y);
+      if (d < dist) { dist = d; best = k; }
+    }
+    return best;
+  };
+
+  /** Right-drag from a Pokémon (or from the one whose move was just picked) onto its target. */
+  const startAim = (e: React.PointerEvent) => {
+    if (e.button !== 2) return;
+    const box = fieldRef.current?.getBoundingClientRect();
+    const onField = new Set(fighters.map(f => f.key));
+    const from = fighterAt(e.clientX, e.clientY) ?? (lastPicked && onField.has(lastPicked) ? lastPicked : null);
+    const f = from ? fighterByKey(mat, sets, from) : null;
+    if (!box || !f || !onField.has(f.key)) return;
+    e.preventDefault();
+    const target = (ev: {clientX: number; clientY: number}) => {
+      const t = fighterAt(ev.clientX, ev.clientY);
+      return t && t !== f.key && onField.has(t) ? t : null;
+    };
+    const move = (ev: PointerEvent) => setAim({from: f.key, x: ev.clientX - box.left, y: ev.clientY - box.top, over: target(ev)});
+    move(e.nativeEvent);
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setAim(null);
+      const to = target(ev);
+      const tf = to ? fighterByKey(mat, sets, to) : null;
+      let mv = mat.actions?.[f.key]?.move;
+      // No move yet, or one that can't be aimed (Protect …): aiming at a foe picks the hardest hit.
+      if (tf && tf.side !== f.side && (!mv || autoTargets(mat, sets, f, mv)?.length === 0)) mv = matHits(mat, f, tf)[0]?.move ?? mv;
+      if (!mv) return;
+      const auto = autoTargets(mat, sets, f, mv);
+      setLastPicked(f.key);
+      set({actions: {...mat.actions, [f.key]: {move: mv, targets: auto ?? (to ? [to] : [])}}});
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   const addNote = () => {
     const note: MatNote = {id: Math.random().toString(36).slice(2, 9), x: 40 + Math.random() * 10, y: 42 + Math.random() * 6, text: '', color: 'gold'};
     set({notes: [...mat.notes, note]});
@@ -122,6 +205,9 @@ export function PlaymatView({sets, usage, mat, onChange}: {
         onChangeOpponent={() => onChange(undefined)}
         panel={panel}
         onPanel={p => setPanel(panel === p ? null : p)}
+        aimSide={aimSide}
+        onAimSide={() => setAimSide(aimSide === 'mine' ? 'theirs' : 'mine')}
+        onClearMoves={Object.keys(mat.actions ?? {}).length ? () => set({actions: {}}) : undefined}
       />
 
       {/* Everything below the toolbar; floating cards anchor here */}
@@ -129,11 +215,13 @@ export function PlaymatView({sets, usage, mat, onChange}: {
       <Bench side="theirs" ids={mat.opp.map((_, j) => j)} mat={mat} sets={sets} selected={selected} onSelect={setSelected}
         drag={drag} onGrab={startDrag} />
 
-      <div className="relative flex flex-1 flex-col" onClick={() => { setSelected(null); setPanel(null); }}>
+      <div ref={fieldRef} className="relative flex flex-1 flex-col" onClick={() => { setSelected(null); setPanel(null); }}
+        onPointerDown={startAim} onContextMenu={e => e.preventDefault()}>
         <div className="grid flex-1 grid-cols-2 items-end px-6">
           {([0, 1] as const).map(spot => (
             <Spot key={spot} side="theirs" spot={spot} index={mat.theirs[spot]} mat={mat} sets={sets} selected={selected}
-              onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 17} />
+              onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 17}
+              hot={aimSide === 'theirs' ? (spot ? '⇧' : '') : null} onPick={n => chooseMove('theirs', spot, n)} />
           ))}
         </div>
 
@@ -144,6 +232,8 @@ export function PlaymatView({sets, usage, mat, onChange}: {
             <span key={f.key} className="flex items-center gap-1">
               {k > 0 && <span className="text-faint">›</span>}
               <span className={f.side === 'mine' ? 'text-info' : 'text-bad'}>{f.set.species}</span>
+              {f.move && <span className="text-dim">{f.move}</span>}
+              {f.prio !== 0 && <span className="num text-gold">{f.prio > 0 ? '+' : ''}{f.prio}</span>}
               <span className="num text-faint">{f.speed}{f.tie ? '=' : ''}</span>
             </span>
           ))}
@@ -152,9 +242,12 @@ export function PlaymatView({sets, usage, mat, onChange}: {
         <div className="grid flex-1 grid-cols-2 items-start px-6">
           {([0, 1] as const).map(spot => (
             <Spot key={spot} side="mine" spot={spot} index={mat.mine[spot]} mat={mat} sets={sets} selected={selected}
-              onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 23} />
+              onSelect={setSelected} drag={drag} onGrab={startDrag} offset={spot * 23}
+              hot={aimSide === 'mine' ? (spot ? '⇧' : '') : null} onPick={n => chooseMove('mine', spot, n)} />
           ))}
         </div>
+
+        <Arrows mat={mat} sets={sets} fighters={fighters} anchors={anchors} aim={aim} />
 
         {/* Sticky notes float over the field */}
         {mat.notes.map(n => (
@@ -200,6 +293,8 @@ export function PlaymatView({sets, usage, mat, onChange}: {
             <li>Drag Pokémon from the benches onto the four spots.</li>
             <li>Click one to see its calcs against the other side, set HP and stat stages.</li>
             <li>Toggle weather, terrain, Tailwind, Trick Room and screens in the bar on top.</li>
+            <li><b className="text-ink">1–4</b> picks a move for the left Pokémon, <b className="text-ink">Shift+1–4</b> for the right one, <b className="text-ink">Tab</b> switches to the other side.</li>
+            <li><b className="text-ink">Right-drag</b> from a Pokémon onto its target draws the attack with its damage. Spread moves aim themselves.</li>
             <li>Add notes and drag them anywhere on the field.</li>
             <li>The dot under your bench Pokémon marks the four you bring.</li>
           </ul>
@@ -283,7 +378,10 @@ function fighterByKey(mat: Playmat, sets: PokemonSet[], key: string): Fighter | 
   return s ? {side, index, set: s, key} : null;
 }
 
-function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel}: {
+function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel, aimSide, onAimSide, onClearMoves}: {
+  aimSide: MatSide;
+  onAimSide: () => void;
+  onClearMoves?: () => void;
   name: string;
   field: MatField;
   onField: (p: Partial<MatField>) => void;
@@ -310,6 +408,10 @@ function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel
         <button className="text-[11.5px] text-faint underline hover:text-ink" onClick={onChangeOpponent}>change</button>
       </span>
       <button className={chip(panel === 'suggest')} onClick={() => onPanel('suggest')}>Suggest</button>
+      <button className={chip(false)} onClick={onAimSide} title="Which side 1–4 picks moves for (Tab)">
+        moves: <span className={aimSide === 'mine' ? 'text-info' : 'text-bad'}>{aimSide === 'mine' ? 'you' : 'them'}</span> <kbd className="text-faint">⇥</kbd>
+      </button>
+      {onClearMoves && <button className="text-[11.5px] text-faint underline hover:text-ink" onClick={onClearMoves}>clear moves</button>}
       <span className="h-4 w-px bg-white/10" />
       <select className="field !w-auto !py-0.5 text-xs" value={field.weather} onChange={e => onField({weather: e.target.value as MatField['weather']})}>
         {(['', 'Rain', 'Sun', 'Sand', 'Snow'] as const).map(w => <option key={w} value={w}>{WEATHER_LABEL[w]}</option>)}
@@ -369,9 +471,11 @@ function Bench({side, ids, mat, sets, selected, onSelect, drag, onGrab, onToggle
   );
 }
 
-function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, offset}: {
+function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, offset, hot, onPick}: {
   side: MatSide; spot: 0 | 1; index: number | null; mat: Playmat; sets: PokemonSet[]; selected: string | null;
   onSelect: (k: string) => void; drag: Drag | null; onGrab: Grab; offset: number;
+  /** Hotkey prefix when 1-4 picks for this side ('' left, '⇧' right), else null. */
+  hot: string | null; onPick: (n: number) => void;
 }) {
   const set = index === null ? null : side === 'mine' ? sets[index] : mat.opp[index];
   const ring = side === 'mine' ? '90,169,255' : '240,86,106';
@@ -386,10 +490,11 @@ function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, o
   return (
     <div data-drop={`${side}:${spot}`} className={`flex justify-center transition ${drag && !valid ? 'opacity-50' : ''}`}>
       {set ? (
-        <button onPointerDown={onGrab(side, index!, true)}
+        <div className="flex flex-col items-center">
+        <button data-fighter={key} onPointerDown={e => e.button === 0 && onGrab(side, index!, true)(e)}
           onClick={e => { e.stopPropagation(); onSelect(key); }}
           className={`flex cursor-grab touch-none select-none flex-col items-center rounded-2xl p-1 transition active:cursor-grabbing ${selected === key && !drag ? 'bg-gold/10 outline outline-1 outline-gold/50' : ''}`}>
-          <div className="relative flex h-[150px] w-44 items-end justify-center">
+          <div data-anchor className="relative flex h-[150px] w-44 items-end justify-center">
             <div className="absolute bottom-0 h-8 w-40 rounded-[50%] transition" style={{background: pad, boxShadow: edge}} />
             {over && !self && drag.fromSpot && <span className="absolute top-1 rounded bg-black/60 px-1.5 text-[10.5px] text-gold">swap</span>}
             {over && !self && !drag.fromSpot && <span className="absolute top-1 rounded bg-black/60 px-1.5 text-[10.5px] text-gold">replace</span>}
@@ -400,6 +505,8 @@ function Spot({side, spot, index, mat, sets, selected, onSelect, drag, onGrab, o
             <div className="h-full rounded-full" style={{width: `${hp}%`, background: hp > 50 ? 'var(--color-good)' : hp > 20 ? 'var(--color-warn)' : 'var(--color-bad)'}} />
           </div>
         </button>
+        <MoveChips set={set} action={mat.actions?.[key]} hot={hot} onPick={onPick} side={side} />
+        </div>
       ) : (
         <div className="flex h-[190px] w-44 items-center justify-center">
           <div className={`flex h-16 w-40 items-center justify-center rounded-[50%] border border-dashed text-[11.5px] transition ${
@@ -576,5 +683,128 @@ function OpponentPicker({usage, onSet}: {usage: UsageSource; onSet: (name: strin
         </div>
       </div>
     </Section>
+  );
+}
+
+interface Aim {
+  from: string;
+  x: number;
+  y: number;
+  over: string | null;
+}
+type Point = {x: number; y: number};
+
+/** Centers of the Pokémon on the field, relative to the field box; re-measured on layout changes. */
+function useAnchors(ref: React.RefObject<HTMLDivElement | null>) {
+  const [anchors, setAnchors] = useState<Record<string, Point>>({});
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const measure = () => {
+      const b = box.getBoundingClientRect();
+      const next: Record<string, Point> = {};
+      box.querySelectorAll<HTMLElement>('[data-fighter]').forEach(el => {
+        const r = (el.querySelector('[data-anchor]') ?? el).getBoundingClientRect();
+        next[el.dataset.fighter!] = {x: Math.round(r.left - b.left + r.width / 2), y: Math.round(r.top - b.top + r.height / 2)};
+      });
+      setAnchors(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    return () => ro.disconnect();
+  });
+  return anchors;
+}
+
+const ARROW = {mine: '#5aa9ff', theirs: '#f0566a', ally: '#3ecf8e'};
+
+/** A curved arrow from a to b, its ends pulled back so the sprites stay visible. */
+function curve(a: Point, b: Point, bend: number) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const c = {x: (a.x + b.x) / 2 - (dy / len) * bend, y: (a.y + b.y) / 2 + (dx / len) * bend};
+  const pull = (p: Point, by: number) => {
+    const l = Math.hypot(c.x - p.x, c.y - p.y) || 1;
+    const k = Math.min(by, l * 0.4) / l;
+    return {x: p.x + (c.x - p.x) * k, y: p.y + (c.y - p.y) * k};
+  };
+  const s = pull(a, 46), e = pull(b, 58);
+  return {d: `M${s.x},${s.y} Q${c.x},${c.y} ${e.x},${e.y}`, mid: {x: (s.x + 2 * c.x + e.x) / 4, y: (s.y + 2 * c.y + e.y) / 4}};
+}
+
+/** The planned attacks as arrows, labelled with the move and its damage; plus the one being drawn. */
+function Arrows({mat, sets, fighters, anchors, aim}: {mat: Playmat; sets: PokemonSet[]; fighters: Fighter[]; anchors: Record<string, Point>; aim: Aim | null}) {
+  const byKey = Object.fromEntries(fighters.map(f => [f.key, f]));
+  const arrows: {id: string; color: string; d: string; mid: Point; move: string; out: ReturnType<typeof matCalc>}[] = [];
+  for (const f of fighters) {
+    const a = mat.actions?.[f.key];
+    if (!a || !anchors[f.key]) continue;
+    const targets = (autoTargets(mat, sets, f, a.move) ?? a.targets).filter(t => byKey[t] && anchors[t] && t !== f.key);
+    for (const t of targets) {
+      const ally = byKey[t].side === f.side;
+      const {d, mid} = curve(anchors[f.key], anchors[t], ally ? 46 : 34);
+      const out = !ally && MOVES[a.move]?.cat !== 'Status' ? matCalc(mat, f, byKey[t], a.move) : null;
+      arrows.push({id: `${f.key}-${t}`, color: ally ? ARROW.ally : ARROW[f.side], d, mid, move: a.move, out});
+    }
+  }
+  const live = aim && anchors[aim.from] ? curve(anchors[aim.from], aim.over ? anchors[aim.over] : {x: aim.x, y: aim.y}, aim.over ? 34 : 0) : null;
+  const liveColor = aim ? ARROW[byKey[aim.from]?.side ?? 'mine'] : '';
+  return (
+    <>
+      <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible">
+        <defs>
+          {Object.entries(ARROW).map(([k, c]) => (
+            <marker key={k} id={`head-${k}`} viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill={c} />
+            </marker>
+          ))}
+        </defs>
+        {arrows.map(a => (
+          <path key={a.id} d={a.d} fill="none" stroke={a.color} strokeWidth={3.5} strokeLinecap="round" opacity={0.9}
+            markerEnd={`url(#head-${Object.entries(ARROW).find(([, c]) => c === a.color)![0]})`} style={{filter: 'drop-shadow(0 2px 3px rgba(0,0,0,.6))'}} />
+        ))}
+        {live && (
+          <path d={live.d} fill="none" stroke={liveColor} strokeWidth={3.5} strokeDasharray="7 6" strokeLinecap="round"
+            markerEnd={`url(#head-${byKey[aim!.from]?.side ?? 'mine'})`} />
+        )}
+      </svg>
+      {arrows.map(a => {
+        const ko = a.out ? koLabel({move: a.move, minPct: a.out.minPct, maxPct: a.out.maxPct, koText: a.out.koText, koN: a.out.koN, koChance: a.out.koChance}) : null;
+        return (
+          <div key={a.id} className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md border bg-black/80 px-1.5 py-0.5 text-[11px] shadow-lg"
+            style={{left: a.mid.x, top: a.mid.y, borderColor: `${a.color}99`}} title={a.out?.desc}>
+            <span style={{color: a.color}}>{a.move}</span>
+            {a.out && (
+              <>
+                <span className="num ml-1.5" style={{color: dmgColor(a.out.maxPct)}}>{pct(a.out.minPct, 0)}–{pct(a.out.maxPct, 0)}</span>
+                {ko && ko.ko !== '—' && <span className="num ml-1 text-dim">{ko.ko}{ko.chance && ` ${ko.chance}`}</span>}
+              </>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** The four moves under a Pokémon on the hotkey side; elsewhere just the planned one. */
+function MoveChips({set, action, hot, onPick, side}: {set: PokemonSet; action?: MatAction; hot: string | null; onPick: (n: number) => void; side: MatSide}) {
+  const tint = side === 'mine' ? 'border-info/70 bg-info/15 text-ink' : 'border-bad/70 bg-bad/15 text-ink';
+  if (hot === null) {
+    return action ? <span className={`mt-1.5 rounded-md border px-2 py-0.5 text-[11px] ${tint}`}>{action.move}</span> : <span className="mt-1.5 h-[22px]" />;
+  }
+  return (
+    <div className="mt-1.5 grid grid-cols-2 gap-1" onPointerDown={e => e.stopPropagation()}>
+      {set.moves.slice(0, 4).map((m, n) => (
+        <button key={m + n} onClick={e => { e.stopPropagation(); onPick(n); }}
+          className={`flex w-[104px] items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-left text-[10.5px] transition ${
+            action?.move === m ? tint : 'border-white/10 bg-black/30 text-dim hover:text-ink'}`}>
+          <span className="h-2 w-2 shrink-0 rounded-sm" style={{background: TYPE_COLOR[MOVES[m]?.type] ?? '#555'}} />
+          <span className="num shrink-0 text-faint">{hot}{n + 1}</span>
+          <span className="truncate">{m}</span>
+        </button>
+      ))}
+    </div>
   );
 }
