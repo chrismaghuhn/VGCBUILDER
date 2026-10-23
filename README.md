@@ -43,6 +43,17 @@ npm run deploy
 builds the site and uploads `dist/` with rsync to `duoforge-vps:/var/www/teamforge` (override with
 `DEPLOY_HOST` / `DEPLOY_DIR`). No sudo is needed for that.
 
+**Automatic:** every push to `main` (a merged PR) runs `.github/workflows/deploy.yml`, which does the
+same from GitHub Actions. Its SSH key (secret `DEPLOY_SSH_KEY`, plus `DEPLOY_HOST` and
+`DEPLOY_KNOWN_HOSTS`) is limited on the server with `rrsync` to `/var/www/teamforge`: it can upload
+files there and nothing else.
+
+**Monthly data:** `.github/workflows/data.yml` runs on the 3rd of every month (or by hand from the
+Actions tab). It fetches the new usage stats, checks them and opens a PR; merging the PR deploys it.
+It fails when a source changed its format, or when Smogon only has a newer regulation: then
+`FORMAT` in `scripts/build-data.mjs` needs updating. Without a SpriteCollab checkout the script keeps
+the portraits and sprites already in the repo.
+
 One-time server setup (Ubuntu 24.04, needs sudo): copy `deploy/` to the server and run
 `sudo bash setup-server.sh <domain>`. It installs Caddy, creates the web folder for the deploy user,
 writes `/etc/caddy/Caddyfile` from `deploy/Caddyfile` and opens ports 80/443 if ufw is active.

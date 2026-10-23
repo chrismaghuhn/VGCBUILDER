@@ -2,7 +2,8 @@
 # Build and upload the site to the VPS. Needs the SSH host "duoforge-vps" (or DEPLOY_HOST).
 set -euo pipefail
 HOST="${DEPLOY_HOST:-duoforge-vps}"
-DIR="${DEPLOY_DIR:-/var/www/teamforge}"
+# Empty DEPLOY_DIR is allowed: with an rrsync-limited key the remote root already is the web folder.
+DIR="${DEPLOY_DIR-/var/www/teamforge}"
 
 cd "$(dirname "$0")/.."
 npm run build

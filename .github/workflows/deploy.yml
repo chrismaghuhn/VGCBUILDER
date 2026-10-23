@@ -1,0 +1,41 @@
+# Every push to main (a merged PR) builds the site and uploads it to the VPS.
+# The deploy key on the server is limited by rrsync to /var/www/teamforge: no shell, no other folders.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName %s\n  User duoforge\n  IdentityFile ~/.ssh/deploy\n  IdentitiesOnly yes\n' "$HOST" > ~/.ssh/config
+      # rrsync roots the key at /var/www/teamforge, so the remote folder is "".
+      - run: bash scripts/deploy.sh
+        env:
+          DEPLOY_HOST: vps
+          DEPLOY_DIR: ''
+      - name: Check the live site
+        run: curl -fsS -o /dev/null https://vgcbuilder.duckdns.org/

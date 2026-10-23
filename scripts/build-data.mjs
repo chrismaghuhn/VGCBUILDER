@@ -55,11 +55,24 @@ async function loadTS(url, name) {
   return Object.values(mod)[0];
 }
 
+/** GitHub Actions shows these as annotations; locally they are plain warnings. */
+const notice = msg => console.warn(process.env.GITHUB_ACTIONS ? `::warning::${msg}` : `Warning: ${msg}`);
+
 async function latestMonth() {
   const html = await (await fetch('https://www.smogon.com/stats/')).text();
-  const months = [...html.matchAll(/href="(\d{4}-\d{2})\/"/g)].map(m => m[1]).sort();
-  for (const m of months.reverse()) {
-    const dir = await (await fetch(`https://www.smogon.com/stats/${m}/chaos/`)).text();
+  const months = [...html.matchAll(/href="(\d{4}-\d{2})\/"/g)].map(m => m[1]).sort().reverse();
+  if (!months.length) throw new Error('Smogon stats index has no months: the page layout changed.');
+  // A newer Champions VGC format in the newest month means a new regulation: say so instead of
+  // quietly keeping old data forever.
+  const newest = await (await fetch(`https://www.smogon.com/stats/${months[0]}/chaos/`)).text();
+  const formats = [...new Set([...newest.matchAll(/href="(gen9champions[a-z0-9]*vgc[a-z0-9]*)-\d+\.json"/g)].map(m => m[1]))];
+  const newer = formats.filter(f => f !== FORMAT.id && f > FORMAT.id);
+  if (newer.length) notice(`Newer format(s) in ${months[0]}: ${newer.join(', ')}. A new regulation? Update FORMAT in scripts/build-data.mjs.`);
+  if (!newest.includes(`${FORMAT.id}-1760.json`)) {
+    throw new Error(`${months[0]} has no stats for ${FORMAT.id}` + (newer.length ? ` but has ${newer.join(', ')}: switch FORMAT to the new regulation.` : '.'));
+  }
+  for (const m of months) {
+    const dir = m === months[0] ? newest : await (await fetch(`https://www.smogon.com/stats/${m}/chaos/`)).text();
     if (dir.includes(`${FORMAT.id}-1760.json`)) return m;
   }
   throw new Error('No usage stats found for ' + FORMAT.id);
@@ -174,10 +187,13 @@ async function main() {
   const moves = {};
   for (const m of gen.moves) {
     if (m.id === 'nomove' || m.isMax || m.isZ) continue;
+    // The Champions data only lists what changed for some moves (Anchor Shot: just its new power);
+    // everything it leaves out comes from Showdown's dex.
+    const dex = pkmnDex.moves.get(m.name);
     moves[m.name] = {
-      type: m.type,
-      cat: m.category || pkmnDex.moves.get(m.name)?.category,
-      bp: m.basePower,
+      type: m.type || dex?.type,
+      cat: m.category || dex?.category,
+      bp: m.basePower ?? dex?.basePower ?? 0,
       // The calc's data only knows spread targets; Showdown's dex has all of them.
       target: m.target || pkmnDex.moves.get(m.name)?.target,
       prio: m.priority || undefined,
@@ -280,6 +296,8 @@ async function main() {
   await extendShareDict(species, items, moves);
   await buildSprites(species);
 
+  validate({species, items, moves, usage});
+
   const write = (name, data) => writeFile(join(OUT, name), JSON.stringify(data));
   await write('format.json', {...FORMAT, month, sources: SOURCES.filter(s => usage[s.key]).map(s => ({key: s.key, label: s.label})), builtAt: new Date().toISOString()});
   await write('species.json', species);
@@ -287,6 +305,41 @@ async function main() {
   await write('moves.json', moves);
   await write('usage.json', usage);
   console.log('Wrote data to', OUT);
+}
+
+/**
+ * Fail loudly when the sources changed shape, instead of writing broken data the site would choke on.
+ * Thresholds are far below today's numbers (≈270 species, ≈520 moves, ≈260 mons per source).
+ */
+function validate({species, items, moves, usage}) {
+  const problems = [];
+  const atLeast = (what, n, min) => { if (!(n >= min)) problems.push(`${what}: ${n} (expected at least ${min})`); };
+  atLeast('species', Object.keys(species).length, 150);
+  atLeast('items', Object.keys(items).length, 50);
+  atLeast('moves', Object.keys(moves).length, 300);
+  for (const [name, sp] of Object.entries(species)) {
+    if (!sp.id || !sp.types?.length || !sp.bs?.spe || !sp.abilities?.length) { problems.push(`species ${name} is missing id/types/stats/abilities`); break; }
+  }
+  for (const [name, m] of Object.entries(moves)) {
+    if (!m.type || !m.cat || typeof m.bp !== 'number') { problems.push(`move ${name} is missing type/category/power`); break; }
+  }
+  const sources = Object.keys(usage);
+  atLeast('usage sources', sources.length, 1);
+  for (const key of sources) {
+    const u = usage[key];
+    const mons = Object.entries(u.mons ?? {});
+    atLeast(`${key} mons`, mons.length, 50);
+    atLeast(`${key} battles`, u.battles ?? 0, 1000);
+    const top = mons.sort((a, b) => b[1].usage - a[1].usage).slice(0, 10);
+    for (const [name, m] of top) {
+      for (const field of ['moves', 'items', 'abilities', 'spreads', 'teammates']) {
+        if (!Array.isArray(m[field]) || !m[field].length) problems.push(`${key}: ${name} has no ${field}`);
+      }
+      if (typeof m.usage !== 'number' || m.usage <= 0) problems.push(`${key}: ${name} has no usage`);
+    }
+  }
+  if (problems.length) throw new Error('Data check failed (did a source change its format?):\n  ' + problems.slice(0, 20).join('\n  '));
+  console.log('Data check passed.');
 }
 
 const SPRITES = join(ROOT, 'public', 'sprites');
@@ -374,7 +427,11 @@ const FORM_ALIASES = {
 
 async function buildPortraits(species) {
   if (!existsSync(join(SPRITECOLLAB, 'tracker.json'))) {
-    console.warn('SpriteCollab not found at', SPRITECOLLAB, '- falling back to Showdown sprites');
+    // CI has no SpriteCollab checkout: keep the portraits already in the repo.
+    const have = new Set(existsSync(PORTRAITS) ? await readdir(PORTRAITS) : []);
+    let kept = 0;
+    for (const sp of Object.values(species)) if (have.has(sp.id + '.png')) { sp.portrait = true; kept++; }
+    console.warn(`SpriteCollab not found at ${SPRITECOLLAB}: keeping ${kept} existing portraits.`);
     return;
   }
   const tracker = JSON.parse(await readFile(join(SPRITECOLLAB, 'tracker.json'), 'utf8'));
