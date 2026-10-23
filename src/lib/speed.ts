@@ -57,16 +57,18 @@ export function applySpeed(set: PokemonSet, sp: number, nature = set.nature) {
  * Set some stats' SP (and optionally the nature). When the total goes over 66, the extra SP come
  * out of the other stats one point at a time from whichever is highest, so investments even out
  * instead of one stat being emptied. Order of sources: unprotected stats first, then `protect`ed
- * ones, the nature-boosted stat last. The changed stats are never touched.
+ * ones, the nature-boosted stat last. Changed and locked stats are never touched; `ok` is false
+ * when the unlocked stats can't cover the overflow.
  */
 export function applySps(
-  set: PokemonSet, changes: Partial<StatTable>, nature = set.nature, protect: StatID[] = [],
-): {set: PokemonSet; taken: [StatID, number][]} {
+  set: PokemonSet, changes: Partial<StatTable>, nature = set.nature, protect: StatID[] = [], locked: StatID[] = set.locked ?? [],
+): {set: PokemonSet; taken: [StatID, number][]; ok: boolean} {
   const sps = {...set.sps, ...changes};
   let over = STATS.reduce((a, s) => a + sps[s], 0) - SP_TOTAL;
   const taken = new Map<StatID, number>();
   const [plus] = NATURES[nature] ?? [null, null];
-  const others = STATS.filter(s => !(s in changes));
+  // Locked stats are never a source of SP.
+  const others = STATS.filter(s => !(s in changes) && !locked.includes(s));
   const tiers = [
     others.filter(s => s !== plus && !protect.includes(s)),
     others.filter(s => s !== plus && protect.includes(s)),
@@ -80,5 +82,5 @@ export function applySps(
     taken.set(from, (taken.get(from) ?? 0) + 1);
     over--;
   }
-  return {set: {...set, nature, sps}, taken: [...taken]};
+  return {set: {...set, nature, sps}, taken: [...taken], ok: over <= 0};
 }

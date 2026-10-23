@@ -17,6 +17,8 @@ export type BulkNeed =
   | ({kind: 'nature'; nature: string} & Spread)
   /** Only possible by giving up hits the set survives now. */
   | ({kind: 'conflict'; nature?: string; breaks: string[]} & Spread)
+  /** Would work, but only by touching locked stats. */
+  | {kind: 'locked'}
   | {kind: 'impossible'};
 
 /** A hit the set currently survives and should keep surviving. */
@@ -74,17 +76,21 @@ export function bulkNeed(attacker: PokemonSet, set: PokemonSet, move: string, ct
   if (survives(attacker, set, move, ctx)) return {kind: 'done'};
   const stat: 'def' | 'spd' = mv.cat === 'Physical' ? 'def' : 'spd';
   const other: StatID = stat === 'def' ? 'spd' : 'def';
+  const locked = set.locked ?? [];
+  const hpFrom = set.sps.hp;
+  const hpTo = locked.includes('hp') ? set.sps.hp : SP_MAX;
+  const defMax = locked.includes(stat) ? set.sps[stat] : SP_MAX;
 
   /** Cheapest (hp, def) per HP value that survives this hit, sorted by extra SP. */
   const candidates = (nature: string): {hp: number; def: number}[] => {
     const variant = (hp: number, d: number): PokemonSet => ({...set, nature, sps: {...set.sps, hp, [stat]: d}});
     const ok = (hp: number, d: number) => survives(attacker, variant(hp, d), move, ctx);
-    if (!ok(SP_MAX, SP_MAX)) return [];
+    if (!ok(hpTo, defMax)) return [];
     const out: {hp: number; def: number; cost: number}[] = [];
-    for (let hp = set.sps.hp; hp <= SP_MAX; hp++) {
-      if (!ok(hp, SP_MAX)) continue;
+    for (let hp = hpFrom; hp <= hpTo; hp++) {
+      if (!ok(hp, defMax)) continue;
       let lo = set.sps[stat];
-      let hi = SP_MAX;
+      let hi = defMax;
       while (lo < hi) {
         const mid = (lo + hi) >> 1;
         if (ok(hp, mid)) hi = mid; else lo = mid + 1;
@@ -102,7 +108,9 @@ export function bulkNeed(attacker: PokemonSet, set: PokemonSet, move: string, ct
     let fallback: (Spread & {breaks: string[]}) | null = null;
     for (const c of list.slice(0, MAX_CANDIDATES)) {
       for (const protect of [[], [other]] as StatID[][]) {
-        const applied = applySps(set, {hp: c.hp, [stat]: c.def}, nature, protect).set;
+        const res = applySps(set, {hp: c.hp, [stat]: c.def}, nature, protect, locked);
+        if (!res.ok) continue; // not enough unlocked SP to pay for it
+        const applied = res.set;
         const breaks = broken(applied);
         if (!breaks.length) return {spread: {...c, stat, protect}, breaks: []};
         if (!fallback || breaks.length < fallback.breaks.length) fallback = {...c, stat, protect, breaks};
@@ -114,14 +122,25 @@ export function bulkNeed(attacker: PokemonSet, set: PokemonSet, move: string, ct
   const plain = pick(set.nature);
   if (plain && !plain.breaks.length) return {kind: 'sp', ...plain.spread};
   const nature = bulkNature(set, stat);
-  const withNature = nature !== set.nature ? pick(nature) : null;
+  const withNature = nature !== set.nature && natureKeepsLocked(set, nature) ? pick(nature) : null;
   if (withNature && !withNature.breaks.length) return {kind: 'nature', nature, ...withNature.spread};
   // Only reachable by trading away other hits: say which ones.
   const best = [plain && {...plain, nature: undefined}, withNature && {...withNature, nature}]
     .filter(x => x !== null)
     .sort((a, b) => a!.breaks.length - b!.breaks.length)[0];
   if (best) return {kind: 'conflict', ...best.spread, nature: best.nature, breaks: best.breaks};
+  // Would it work without the locks? Then the locks are what stops it.
+  if (locked.length && bulkNeed(attacker, {...set, locked: []}, move, ctx, keep).kind !== 'impossible') return {kind: 'locked'};
   return {kind: 'impossible'};
+}
+
+/** A nature change must not change any locked stat (e.g. Timid → Calm with Speed locked). */
+function natureKeepsLocked(set: PokemonSet, nature: string): boolean {
+  const mult = (n: string, s: StatID) => {
+    const [plus, minus] = NATURES[n] ?? [null, null];
+    return plus === minus ? 1 : plus === s ? 1.1 : minus === s ? 0.9 : 1;
+  };
+  return (set.locked ?? []).every(s => mult(set.nature, s) === mult(nature, s));
 }
 
 /** The threat's most damaging attack against the set (by max roll). */
