@@ -4,6 +4,7 @@ import {
   TYPE_COLOR, getItem, pct, type StatID, type UsageSource,
 } from '../lib/data';
 import {battleForme, parseSpread, popularSet, setStats, type Issue, type PokemonSet} from '../lib/team';
+import {Describe, DescBody, DescLine} from './Describe';
 import {Combobox, Portrait, TypeBadge, type Option} from './ui';
 
 const STAT_COLOR: Record<StatID, string> = {
@@ -158,20 +159,23 @@ export function SetEditor({
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <div className="label mb-1">Item</div>
-          <Combobox value={set.item} options={itemOptions} onChange={item => update({item})} placeholder="Item" />
+          <Combobox value={set.item} options={itemOptions} onChange={item => update({item})} placeholder="Item"
+            describe={v => <DescBody kind="items" name={v} />} />
+          <DescLine kind="items" name={set.item} />
         </div>
         <div>
           <div className="label mb-1">Ability</div>
           {sp?.mega ? (
-            <div className="field text-ink">{sp.abilities[0]}</div>
-          ) : (
+            <><div className="field text-ink">{sp.abilities[0]}</div><DescLine kind="abilities" name={sp.abilities[0]} /></>
+          ) : (<>
             <select className="field" value={set.ability} onChange={e => update({ability: e.target.value})}>
               {baseSp?.abilities.map(a => {
                 const p = u?.abilities.find(([n]) => n === a)?.[1];
                 return <option key={a} value={a}>{a}{p ? ` · ${pct(p, 0)}` : ''}</option>;
               })}
             </select>
-          )}
+            <DescLine kind="abilities" name={set.ability} />
+          </>)}
         </div>
       </div>
 
@@ -182,7 +186,7 @@ export function SetEditor({
             const m = set.moves[k] ?? '';
             const mv = MOVES[m];
             return (
-              <div key={k} className="relative">
+              <Describe key={k} kind="moves" name={m || undefined} className="relative block" hoverOnly>
                 <span className="pointer-events-none absolute left-0 top-0 z-10 h-full w-1 rounded-l-lg" style={{background: mv ? TYPE_COLOR[mv.type] : 'transparent'}} />
                 <Combobox
                   value={m}
@@ -193,8 +197,9 @@ export function SetEditor({
                     update({moves});
                   }}
                   placeholder={`Move ${k + 1}`}
+                  describe={v => <DescBody kind="moves" name={v} />}
                 />
-              </div>
+              </Describe>
             );
           })}
         </div>

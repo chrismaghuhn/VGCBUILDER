@@ -3,6 +3,7 @@ import {MOVES, SPECIES, STAT_LABEL, TYPE_COLOR, pct, type UsageSource} from '../
 import {metaSet} from '../lib/meta';
 import {CONCEPTS, NOT_IN_FORMAT, QUICK_CONCEPTS, parseQuery, queryMoves, search, suggestTerms, type Term} from '../lib/search';
 import type {PokemonSet} from '../lib/team';
+import {Describe} from './Describe';
 import {Portrait, Section, TypeBadge} from './ui';
 
 type Sort = 'relevance' | 'usage' | 'spe' | 'name';
@@ -175,7 +176,7 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
                 <div className="mt-1 truncate text-[11.5px] text-dim">
                   {sp.abilities.map((a, i) => (
                     <span key={a} className={h.abilities.includes(a) ? 'font-semibold text-gold' : ''}>
-                      {i ? ' · ' : ''}{a}
+                      {i ? ' · ' : ''}<Describe kind="abilities" name={a}>{a}</Describe>
                       {h.abilities.includes(a) && u?.abilities.find(([n]) => n === a) && (
                         <span className="num ml-0.5 text-[10px] font-normal text-gold/80">{Math.round(u.abilities.find(([n]) => n === a)![1] * 100)}%</span>
                       )}
@@ -184,19 +185,19 @@ export function SearchView({sets, usage, onAdd, query, setQuery}: {
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {h.items.map(i => (
-                    <span key={i} className="flex items-center gap-1 rounded border border-gold/40 bg-gold/10 px-1.5 py-0.5 text-[11px]">
+                    <Describe key={i} kind="items" name={i} className="flex items-center gap-1 rounded border border-gold/40 bg-gold/10 px-1.5 py-0.5 text-[11px]">
                       @ {i}<span className="num text-[10px] text-gold/80">{Math.round((u?.items.find(([n]) => n === i)?.[1] ?? 0) * 100)}%</span>
-                    </span>
+                    </Describe>
                   ))}
                   {moves.slice(0, 6).map(m => {
                     const mv = MOVES[m];
                     const p = usedMoves.get(m);
                     return (
-                      <span key={m} className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] ${h.moves.includes(m) ? 'border-gold/40 bg-gold/10 text-ink' : 'border-line text-dim'}`}>
+                      <Describe key={m} kind="moves" name={m} className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] ${h.moves.includes(m) ? 'border-gold/40 bg-gold/10 text-ink' : 'border-line text-dim'}`}>
                         <span className="h-2 w-2 rounded-sm" style={{background: TYPE_COLOR[mv?.type] ?? '#555'}} />
                         {m}
                         {p ? <span className="num text-[10px] text-gold/80">{Math.round(p * 100)}%</span> : null}
-                      </span>
+                      </Describe>
                     );
                   })}
                   {moves.length > 6 && <span className="px-1 text-[11px] text-faint">+{moves.length - 6}</span>}
