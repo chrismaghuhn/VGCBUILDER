@@ -154,6 +154,23 @@ export interface SpeedField {
   tailwind?: boolean;
   /** Tailwind on the opponents' side. */
   enemyTailwind?: boolean;
+  /** Speed stages (-6..+6), e.g. -1 after Icy Wind. */
+  myStage?: number;
+  enemyStage?: number;
+  myPara?: boolean;
+  enemyPara?: boolean;
+}
+
+/** Stat stage multiplier: +1 = 1.5×, -1 = 2/3×. */
+export const stageMult = (n: number) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
+
+/** Stages, Tailwind and paralysis on top of a speed value (in battle order). */
+function sideMods(spe: number, field: SpeedField, mine: boolean, labels: string[]): number {
+  const stage = (mine ? field.myStage : field.enemyStage) ?? 0;
+  if (stage) { spe = Math.floor(spe * stageMult(stage)); labels.push(`${stage > 0 ? '+' : ''}${stage}`); }
+  if (mine ? field.tailwind : field.enemyTailwind) { spe *= 2; labels.push('Tailwind'); }
+  if (mine ? field.myPara : field.enemyPara) { spe = Math.floor(spe / 2); labels.push('Para'); }
+  return spe;
 }
 
 const WEATHER_SETTERS: Record<string, Weather> = {Drizzle: 'Rain', Drought: 'Sun', 'Sand Stream': 'Sand', 'Snow Warning': 'Snow'};
@@ -219,12 +236,15 @@ function abilitySpeedMod(ability: string, field: SpeedField): {mult: number; lab
 export function effectiveSpeed(set: PokemonSet, field: SpeedField, mine = false): {speed: number; labels: string[]} {
   let spe = setStats(set).spe;
   const labels: string[] = [];
+  const stage = (mine ? field.myStage : field.enemyStage) ?? 0;
+  if (stage) { spe = Math.floor(spe * stageMult(stage)); labels.push(`${stage > 0 ? '+' : ''}${stage}`); }
   const ability = abilityOf(set);
   const mod = abilitySpeedMod(ability, field);
   if (mod.label) labels.push(mod.label);
   spe = Math.floor(spe * mod.mult);
   if (set.item === 'Choice Scarf') { spe = Math.floor(spe * 1.5); labels.push('Scarf'); }
   if (mine ? field.tailwind : field.enemyTailwind) { spe *= 2; labels.push('Tailwind'); }
+  if (mine ? field.myPara : field.enemyPara) { spe = Math.floor(spe / 2); labels.push('Para'); }
   return {speed: spe, labels};
 }
 
@@ -255,9 +275,14 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
     const own = enemyWeather ? metaWeather(name, usage) : null;
     const weather = own?.weather ?? field.weather;
     const mod = abilitySpeedMod(ability, {weather, electricTerrain: field.electricTerrain});
-    const tw = field.enemyTailwind ? 2 : 1;
-    const top = Math.floor(speeds[0] * mod.mult) * tw;
-    const max = Math.floor(Math.max(...speeds) * mod.mult) * tw;
+    const sideLabels: string[] = [];
+    const apply = (raw: number) => {
+      const st = field.enemyStage ? Math.floor(raw * stageMult(field.enemyStage)) : raw;
+      return sideMods(Math.floor(st * mod.mult), {...field, enemyStage: 0}, false, []);
+    };
+    sideMods(1, field, false, sideLabels);
+    const top = apply(speeds[0]);
+    const max = apply(Math.max(...speeds));
     const notes: string[] = [];
     if (max !== top) notes.push(`up to ${max}`);
     const scarf = u.items.find(([i]) => i === 'Choice Scarf');
@@ -269,7 +294,7 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
       if (SPEED_NOTES[a] && p > 0.15) notes.push(SPEED_NOTES[a]);
     }
     if (own && mod.label) notes.unshift(`${WEATHER_LABEL[own.weather]} from ${own.source === name ? 'itself' : own.source}`);
-    out.push({name, speed: top, max, mine: false, usage: u.usage, boosts: [...(mod.label ? [mod.label] : []), ...(tw > 1 ? ['Tailwind'] : [])], note: notes.join(' · ')});
+    out.push({name, speed: top, max, mine: false, usage: u.usage, boosts: [...(mod.label ? [mod.label] : []), ...sideLabels], note: notes.join(' · ')});
   }
   return out;
 }
