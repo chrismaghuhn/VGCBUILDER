@@ -4,6 +4,7 @@ import {WEATHER_LABEL, teamField} from '../lib/analysis';
 import {metaSet} from '../lib/calc';
 import {leadAdvice, rankPlans} from '../lib/matchup';
 import {activeFighters, autoTargets, canMega, keyOf, matSet, toggleMega, matCalc, matHits, newPlaymat, planMove, turnOrder, type Fighter} from '../lib/playmat';
+import {matchFromReplay, type Match} from '../lib/matches';
 import {fetchReplay, guessMe, parseReplay, replayId, replayPerspective, replayPlaymat, showStep, type ParsedReplay, type PSide} from '../lib/replay';
 import {decodeShare, fetchPokepaste, pokepasteId, sharePayload} from '../lib/share';
 import {battleForme, importTeam, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
@@ -20,11 +21,14 @@ const NOTE_COLORS: Record<MatNote['color'], string> = {gold: '#f5c542', blue: '#
 
 type Panel = 'suggest' | 'help' | 'replay' | 'log';
 
-export function PlaymatView({sets: mySets, usage, mat, onChange}: {
+export function PlaymatView({sets: mySets, usage, mat, onChange, onSaveMatch, savedReplays = []}: {
   sets: PokemonSet[];
   usage: UsageSource;
   mat?: Playmat;
   onChange: (m: Playmat | undefined, coalesceKey?: string) => void;
+  /** Add the replay on the mat to the team's match log. */
+  onSaveMatch?: (m: Match) => void;
+  savedReplays?: string[];
 }) {
   // A replay brings its own team for the bottom side.
   const sets = mat?.replay ? mat.replay.mine : mySets;
@@ -250,7 +254,16 @@ export function PlaymatView({sets: mySets, usage, mat, onChange}: {
       />
 
       {mat.replay && (
-        <ReplayBar mat={mat} onStep={goto} onLog={() => setPanel(panel === 'log' ? null : 'log')} logOpen={panel === 'log'} onExit={exitReplay}
+        <ReplayBar mat={mat} onStep={goto}
+          saved={!!mat.replay.replay.id && savedReplays.includes(mat.replay.replay.id)}
+          onSave={onSaveMatch && (() => {
+            const r = mat.replay!;
+            const m = matchFromReplay(r.replay, r.me, usage, mySets);
+            // Turn notes go along into the match notes.
+            m.notes = r.replay.steps.map(s => s.turn).filter((t, i, a) => a.indexOf(t) === i)
+              .filter(t => r.turnNotes[t]?.trim()).map(t => `${turnTitle(t)}: ${r.turnNotes[t].trim()}`).join('\n');
+            onSaveMatch(m);
+          })} onLog={() => setPanel(panel === 'log' ? null : 'log')} logOpen={panel === 'log'} onExit={exitReplay}
           onSwap={() => {
             const r = mat.replay!;
             onChange(showStep(replayPlaymat(r.replay, r.me === 'p1' ? 'p2' : 'p1', mySets, usage, r.turnNotes), r.step));
@@ -1032,8 +1045,9 @@ function ReplayImport({onLoad}: {onLoad: (r: ParsedReplay, hint: PSide | null) =
 }
 
 /** Players, side swap and the turn strip of a replay. */
-function ReplayBar({mat, onStep, onLog, logOpen, onSwap, onExit}: {
+function ReplayBar({mat, onStep, onLog, logOpen, onSwap, onExit, onSave, saved}: {
   mat: Playmat; onStep: (n: number) => void; onLog: () => void; logOpen: boolean; onSwap: () => void; onExit: () => void;
+  onSave?: () => void; saved: boolean;
 }) {
   const r = mat.replay!;
   const {steps, players, winner} = r.replay;
@@ -1073,6 +1087,9 @@ function ReplayBar({mat, onStep, onLog, logOpen, onSwap, onExit}: {
       <button className={btn} onClick={() => onStep(r.step + 1)} disabled={r.step >= steps.length - 1} title="Next turn (→)">▶</button>
       <span className="h-4 w-px shrink-0 bg-white/10" />
       <button className={`${btn} ${logOpen ? '!border-gold !text-gold' : ''}`} onClick={onLog}>Log</button>
+      {onSave && (saved
+        ? <span className="shrink-0 text-[11.5px] text-good" title="This replay is in the Matches tab">✓ in match log</span>
+        : <button className={btn} onClick={onSave} title="Add this game to the Matches tab (turn notes included)">Save to log</button>)}
       <button className="shrink-0 text-[11.5px] text-faint underline hover:text-ink" onClick={onExit} title="Leave the replay and keep their team on the mat">exit replay</button>
     </div>
   );

@@ -1,3 +1,4 @@
+import type {Match} from './matches';
 import type {ReplayMat} from './replay';
 import {
   ITEM_NAMES, MOVES, NATURES, SP_MAX, SP_TOTAL, SPECIES, STAT_LABEL, STATS,
@@ -27,6 +28,8 @@ export interface Team {
   noMegas?: boolean;
   /** The Playmat: opponent, board state and notes. */
   playmat?: Playmat;
+  /** Played games (match log). */
+  matches?: Match[];
 }
 
 export type MatSide = 'mine' | 'theirs';

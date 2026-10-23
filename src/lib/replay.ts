@@ -68,6 +68,8 @@ export interface ParsedReplay {
   format: string;
   players: Record<PSide, string>;
   winner?: string;
+  /** Upload date (yyyy-mm-dd) of a fetched replay. */
+  date?: string;
   /** Species from team preview (plus any that only showed up later). */
   teams: Record<PSide, string[]>;
   revealed: Record<PSide, Revealed[]>;
@@ -92,8 +94,10 @@ export const replayPerspective = (input: string): PSide | null => (/[?&]p2\b/.te
 export async function fetchReplay(id: string): Promise<ParsedReplay> {
   const res = await fetch(`https://replay.pokemonshowdown.com/${id}.json`);
   if (!res.ok) throw new Error(res.status === 404 ? 'Replay not found.' : `Showdown answered ${res.status}.`);
-  const data = await res.json() as {id: string; log: string; format?: string};
-  return parseReplay(data.log, data.id, data.format);
+  const data = await res.json() as {id: string; log: string; format?: string; uploadtime?: number};
+  const r = parseReplay(data.log, data.id, data.format);
+  if (data.uploadtime) r.date = new Date(data.uploadtime * 1000).toISOString().slice(0, 10);
+  return r;
 }
 
 // ------------------------------------------------------------------ Parse
