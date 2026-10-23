@@ -1,7 +1,7 @@
 // Builds trimmed JSON data for the current VGC format (Pokémon Champions, Reg M-C).
 // Sources: Showdown's `champions` mod (legality, learnsets) + Smogon usage stats.
 // Usage: node scripts/build-data.mjs [YYYY-MM]
-import {copyFile, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
+import {copyFile, mkdir, readdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname, join} from 'node:path';
@@ -24,6 +24,7 @@ const FORMAT = {
 const SOURCES = [
   {key: 'bo1-1760', label: 'Bo1 · 1760+', file: `${FORMAT.id}-1760`},
   {key: 'bo3-1760', label: 'Bo3 · 1760+', file: `${FORMAT.id}bo3-1760`},
+  {key: 'all-1760', label: 'Bo1+Bo3 · 1760+', merge: ['bo1-1760', 'bo3-1760']},
   {key: 'bo1-1500', label: 'Bo1 · 1500+', file: `${FORMAT.id}-1500`},
 ];
 // PMD SpriteCollab checkout (CC BY-NC 4.0). Override with SPRITECOLLAB=/path.
@@ -184,9 +185,75 @@ async function main() {
   }
 
   // ---- Usage -----------------------------------------------------------
+  // Smogon writes "Sirfetch'd", Showdown "Sirfetch’d": match by ID.
+  const byId = Object.fromEntries(Object.keys(species).map(n => [toID(n), n]));
+  const monName = k => byId[toID(k)] || k;
+
+  // Checks and Counters come as {n, p, d} (older dumps: [n, p, d]).
+  const ccTuple = v => (Array.isArray(v) ? v : [v.n, v.p, v.d]);
+
+  /** Trim one chaos dataset into what the app needs. */
+  const toSource = ({data, leads, meta, battles}, label) => {
+    const mons = {};
+    for (const [name, d] of Object.entries(data).sort((a, b) => b[1].usage - a[1].usage)) {
+      if (d.usage < 0.0005) continue;
+      const total = Object.values(d.Abilities).reduce((a, b) => a + b, 0) || 1;
+      const cc = Object.entries(d['Checks and Counters'] || {})
+        .map(([k, v]) => [k, ccTuple(v)])
+        .filter(([, [n]]) => n >= 20)
+        .map(([k, [, p, dd]]) => [k, +(p - 4 * dd).toFixed(3)])
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 12);
+      mons[monName(name)] = {
+        usage: +d.usage.toFixed(5),
+        lead: +(leads[toID(name)] ?? 0).toFixed(4),
+        abilities: pct(d.Abilities, total, 4, 0.005, k => gen.abilities.get(k)?.name || k),
+        items: pct(d.Items, total, 10, 0.005, k => gen.items.get(k)?.name || k),
+        spreads: pct(d.Spreads, total, 8, 0.003),
+        moves: pct(d.Moves, total, 18, 0.005, k => gen.moves.get(k)?.name || k),
+        teammates: pct(d.Teammates, total, 16, 0.005, monName),
+        counters: cc.map(([k, v]) => [monName(k), v]),
+      };
+    }
+    return {label, month, battles, metagame: meta, mons};
+  };
+
+  // Team weight of a dataset: chaos usage = mon weight / (sum of mon weights / 6).
+  const teamWeight = data => Object.values(data).reduce((a, m) => a + Object.values(m.Abilities).reduce((x, y) => x + y, 0), 0) / 6;
+  const addInto = (into, from) => { for (const [k, v] of Object.entries(from || {})) into[k] = (into[k] ?? 0) + v; };
+
+  /** Merge raw datasets: weighted counts add up, shares are averaged by team weight. */
+  const mergeRaw = raws => {
+    const weights = raws.map(r => teamWeight(r.data));
+    const W = weights.reduce((a, b) => a + b, 0);
+    const data = {};
+    raws.forEach((r, i) => {
+      for (const [name, d] of Object.entries(r.data)) {
+        const m = data[name] ??= {usage: 0, Abilities: {}, Items: {}, Spreads: {}, Moves: {}, Teammates: {}, cc: {}};
+        m.usage += d.usage * weights[i] / W;
+        for (const f of ['Abilities', 'Items', 'Spreads', 'Moves', 'Teammates']) addInto(m[f], d[f]);
+        for (const [k, v] of Object.entries(d['Checks and Counters'] || {})) {
+          const [n, p, dd] = ccTuple(v);
+          const c = m.cc[k] ??= [0, 0, 0];
+          c[1] = (c[1] * c[0] + p * n) / (c[0] + n || 1);
+          c[2] = (c[2] * c[0] + dd * n) / (c[0] + n || 1);
+          c[0] += n;
+        }
+      }
+    });
+    for (const m of Object.values(data)) { m['Checks and Counters'] = m.cc; delete m.cc; }
+    const avg = key => {
+      const out = {};
+      raws.forEach((r, i) => { for (const [k, v] of Object.entries(r[key])) out[k] = (out[k] ?? 0) + v * weights[i] / W; });
+      return out;
+    };
+    return {data, leads: avg('leads'), meta: avg('meta'), battles: raws.reduce((a, r) => a + r.battles, 0)};
+  };
+
+  const raw = {};
   const usage = {};
-  for (const src of SOURCES) {
-    const base = `https://www.smogon.com/stats/${month}`;
+  const base = `https://www.smogon.com/stats/${month}`;
+  for (const src of SOURCES.filter(s => !s.merge)) {
     let chaos;
     try {
       chaos = JSON.parse(await fetchText(`${base}/chaos/${src.file}.json`, `${month}-${src.file}.json`));
@@ -198,38 +265,13 @@ async function main() {
     const leads = {};
     for (const [k, v] of Object.entries(leadsRaw)) leads[toID(k)] = v;
     const meta = parseMetagame(await fetchText(`${base}/metagame/${src.file}.txt`, `${month}-meta-${src.file}.txt`).catch(() => ''));
-    const mons = {};
-    // Smogon writes "Sirfetch'd", Showdown "Sirfetch’d": match by ID.
-    const byId = Object.fromEntries(Object.keys(species).map(n => [toID(n), n]));
-    const monName = k => byId[toID(k)] || k;
-    const ranked = Object.entries(chaos.data).sort((a, b) => b[1].usage - a[1].usage);
-    for (const [name, d] of ranked) {
-      if (d.usage < 0.0005) continue;
-      const total = Object.values(d.Abilities).reduce((a, b) => a + b, 0) || 1;
-      const cc = Object.entries(d['Checks and Counters'] || {})
-        .filter(([, v]) => v[0] >= 20)
-        .map(([k, v]) => [k, +(v[1] - 4 * v[2]).toFixed(3)])
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 12);
-      mons[monName(name)] = {
-        usage: +d.usage.toFixed(5),
-        lead: leads[toID(name)] ?? 0,
-        abilities: pct(d.Abilities, total, 4, 0.005, k => gen.abilities.get(k)?.name || k),
-        items: pct(d.Items, total, 10, 0.005, k => gen.items.get(k)?.name || k),
-        spreads: pct(d.Spreads, total, 8, 0.003),
-        moves: pct(d.Moves, total, 18, 0.005, k => gen.moves.get(k)?.name || k),
-        teammates: pct(d.Teammates, total, 16, 0.005, monName),
-        counters: cc.map(([k, v]) => [monName(k), v]),
-      };
-    }
-    usage[src.key] = {
-      label: src.label,
-      month,
-      battles: chaos.info['number of battles'],
-      metagame: meta,
-      mons,
-    };
-    console.log(src.key, Object.keys(mons).length, 'mons,', chaos.info['number of battles'], 'battles');
+    raw[src.key] = {data: chaos.data, leads, meta, battles: chaos.info['number of battles']};
+  }
+  for (const src of SOURCES) {
+    const r = src.merge ? (src.merge.every(k => raw[k]) ? mergeRaw(src.merge.map(k => raw[k])) : null) : raw[src.key];
+    if (!r) continue;
+    usage[src.key] = toSource(r, src.label);
+    console.log(src.key, Object.keys(usage[src.key].mons).length, 'mons,', r.battles, 'battles');
   }
 
   await buildPortraits(species);
@@ -255,7 +297,8 @@ async function buildPortraits(species) {
     return;
   }
   const tracker = JSON.parse(await readFile(join(SPRITECOLLAB, 'tracker.json'), 'utf8'));
-  await rm(PORTRAITS, {recursive: true, force: true});
+  // Overwrite in place instead of wiping the folder: a running Vite dev server
+  // would otherwise lose track of the public files and serve index.html for them.
   await mkdir(PORTRAITS, {recursive: true});
   const credits = new Set();
   let found = 0;
@@ -291,6 +334,8 @@ async function buildPortraits(species) {
       }
     }
   }
+  const keep = new Set(Object.values(species).filter(sp => sp.portrait).map(sp => sp.id + '.png').concat('CREDITS.txt'));
+  for (const f of await readdir(PORTRAITS)) if (!keep.has(f)) await rm(join(PORTRAITS, f));
   await writeFile(join(PORTRAITS, 'CREDITS.txt'),
     'Portraits from PMD SpriteCollab (https://github.com/PMDCollab/SpriteCollab), CC BY-NC 4.0.\n' +
     'Credit IDs (see SpriteCollab credit_names.txt):\n' + [...credits].sort().join('\n') + '\n');
