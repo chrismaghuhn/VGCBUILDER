@@ -150,8 +150,10 @@ export const WEATHER_LABEL: Record<Weather, string> = {'': 'No weather', Rain: '
 export interface SpeedField {
   weather: Weather;
   electricTerrain?: boolean;
-  /** Tailwind on my side only. */
+  /** Tailwind on my side. */
   tailwind?: boolean;
+  /** Tailwind on the opponents' side. */
+  enemyTailwind?: boolean;
 }
 
 const WEATHER_SETTERS: Record<string, Weather> = {Drizzle: 'Rain', Drought: 'Sun', 'Sand Stream': 'Sand', 'Snow Warning': 'Snow'};
@@ -222,7 +224,7 @@ export function effectiveSpeed(set: PokemonSet, field: SpeedField, mine = false)
   if (mod.label) labels.push(mod.label);
   spe = Math.floor(spe * mod.mult);
   if (set.item === 'Choice Scarf') { spe = Math.floor(spe * 1.5); labels.push('Scarf'); }
-  if (mine && field.tailwind) { spe *= 2; labels.push('Tailwind'); }
+  if (mine ? field.tailwind : field.enemyTailwind) { spe *= 2; labels.push('Tailwind'); }
   return {speed: spe, labels};
 }
 
@@ -234,6 +236,8 @@ export interface SpeedEntry {
   boosts: string[];
   note: string;
   usage?: number;
+  /** Fastest of the common spreads (meta entries). */
+  max?: number;
 }
 
 /** Speed of each top meta Pokémon with its most common spread and ability. */
@@ -251,8 +255,9 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
     const own = enemyWeather ? metaWeather(name, usage) : null;
     const weather = own?.weather ?? field.weather;
     const mod = abilitySpeedMod(ability, {weather, electricTerrain: field.electricTerrain});
-    const top = Math.floor(speeds[0] * mod.mult);
-    const max = Math.floor(Math.max(...speeds) * mod.mult);
+    const tw = field.enemyTailwind ? 2 : 1;
+    const top = Math.floor(speeds[0] * mod.mult) * tw;
+    const max = Math.floor(Math.max(...speeds) * mod.mult) * tw;
     const notes: string[] = [];
     if (max !== top) notes.push(`up to ${max}`);
     const scarf = u.items.find(([i]) => i === 'Choice Scarf');
@@ -264,7 +269,7 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
       if (SPEED_NOTES[a] && p > 0.15) notes.push(SPEED_NOTES[a]);
     }
     if (own && mod.label) notes.unshift(`${WEATHER_LABEL[own.weather]} from ${own.source === name ? 'itself' : own.source}`);
-    out.push({name, speed: top, mine: false, usage: u.usage, boosts: mod.label ? [mod.label] : [], note: notes.join(' · ')});
+    out.push({name, speed: top, max, mine: false, usage: u.usage, boosts: [...(mod.label ? [mod.label] : []), ...(tw > 1 ? ['Tailwind'] : [])], note: notes.join(' · ')});
   }
   return out;
 }

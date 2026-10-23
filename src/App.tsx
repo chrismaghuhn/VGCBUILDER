@@ -10,6 +10,7 @@ import {PasteDialog} from './components/PasteDialog';
 import {Picker} from './components/Picker';
 import {SearchView} from './components/SearchView';
 import {SetEditor} from './components/SetEditor';
+import {SpeedView} from './components/SpeedView';
 import {TeamBar} from './components/TeamBar';
 import type {WeatherPref, WeatherState} from './components/ui';
 
@@ -17,6 +18,7 @@ const PAGES = [
   {key: 'bauen', label: 'Build'},
   {key: 'suche', label: 'Search'},
   {key: 'analyse', label: 'Analysis'},
+  {key: 'speed', label: 'Speed'},
   {key: 'meta', label: 'Meta'},
   {key: 'calc', label: 'Calc'},
 ] as const;
@@ -37,6 +39,8 @@ export default function App() {
   const usage = USAGE[store.source] ?? USAGE[FORMAT.sources[0].key];
   const [page, setPageState] = useState<Page>(pageFromHash);
   const [selected, setSelected] = useState(0);
+  // Pokémon picked for speed planning on the Speed tab.
+  const [speedSel, setSpeedSel] = useState(0);
   const [dialog, setDialog] = useState<'import' | 'export' | null>(null);
   const [calcPair, setCalcPair] = useState<[Side, Side] | null>(null);
   const [weatherPref, setWeatherPref] = useState<WeatherPref>('auto');
@@ -50,7 +54,11 @@ export default function App() {
     window.scrollTo({top: 0});
   };
   useEffect(() => {
-    const onHash = () => setPageState(pageFromHash());
+    // Ignore hashes we don't know instead of falling back to Build.
+    const onHash = () => {
+      const h = location.hash.slice(1);
+      if (PAGES.some(p => p.key === h)) setPageState(h as Page);
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -148,9 +156,13 @@ export default function App() {
         </div>
         <TeamBar
           sets={sets}
-          selected={page === 'bauen' ? sel : -1}
+          selected={page === 'bauen' ? sel : page === 'speed' ? Math.min(speedSel, sets.length - 1) : -1}
           issues={issues}
-          onSelect={i => { setSelected(i); setPage('bauen'); }}
+          onSelect={i => {
+            // On the Speed tab a click picks the Pokémon to plan for; elsewhere it opens the editor.
+            if (page === 'speed' && i < sets.length) setSpeedSel(i);
+            else { setSelected(i); setPage('bauen'); }
+          }}
           onRemove={removeSlot}
           onMove={(from, to) => { setSets(p => { const n = [...p]; const [x] = n.splice(from, 1); n.splice(to, 0, x); return n; }); setSelected(to); }}
         />
@@ -193,6 +205,7 @@ export default function App() {
         />
       )}
       {page === 'analyse' && <AnalysisView sets={sets} usage={usage} issues={issues} weather={weather} />}
+      {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={speedSel} onUpdateSet={(i, s) => setSlot(i, s)} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
       {page === 'calc' && <CalcView sets={sets} usage={usage} pair={calcPair} setPair={setCalcPair} />}
 
