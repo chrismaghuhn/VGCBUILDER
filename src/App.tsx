@@ -145,7 +145,7 @@ export default function App() {
 
   return (
     // The header spans the full width on every page (as on the Playmat); the content below is centred.
-    <div className={`px-4 pt-4 sm:px-6 ${page === 'playmat' ? 'pb-4' : 'pb-16'}`}>
+    <div className={`flex min-h-screen flex-col px-4 pt-4 sm:px-6 ${page === 'playmat' ? 'pb-4' : 'pb-6'}`}>
       {/* Header */}
       <header className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-3">
@@ -176,7 +176,7 @@ export default function App() {
           </select>
         </div>
       </header>
-      <div className={page === 'playmat' ? '' : 'mx-auto max-w-[1440px]'}>
+      <div className={`flex w-full flex-1 flex-col ${page === 'playmat' ? '' : 'mx-auto max-w-[1440px]'}`}>
 
       {store.saveError && (
         <div className="mb-4 border border-bad/60 bg-bad/10 px-3 py-2 text-[12.5px] text-bad">
@@ -329,7 +329,9 @@ export default function App() {
         </Suspense>
       )}
 
-      <footer className={`mt-12 border-t border-line pt-4 text-[11.5px] text-faint ${page === 'playmat' ? 'hidden' : ''}`}>
+      {/* Room above the footer on long pages; mt-auto keeps it at the bottom of the window on short ones */}
+      <div className={`h-12 shrink-0 ${page === 'playmat' ? 'hidden' : ''}`} />
+      <footer className={`mt-auto border-t border-line pt-4 text-[11.5px] text-faint ${page === 'playmat' ? 'hidden' : ''}`}>
         <a className="underline hover:text-dim" href="https://www.smogon.com/stats/" target="_blank" rel="noreferrer">Smogon</a> ({usage?.label}, {usage?.month ?? FORMAT.month}) ·
         Showdown <code>champions</code> mod · @smogon/calc ·
         Portraits: <a className="underline hover:text-dim" href="https://github.com/PMDCollab/SpriteCollab" target="_blank" rel="noreferrer">PMD SpriteCollab</a> (CC BY-NC 4.0)
