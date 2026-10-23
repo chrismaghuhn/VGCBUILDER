@@ -18,13 +18,16 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 export const newTeam = (name = 'New Team'): Team => ({id: newId(), name, sets: []});
 
 function load(): Saved {
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(KEY);
+    raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw) as Saved;
       if (s.teams?.length) return {...s, source: FORMAT.sources.some(x => x.key === s.source) ? s.source : FORMAT.sources[0].key};
     }
-  } catch { /* storage unavailable */ }
+  } catch { /* storage unavailable or unreadable */ }
+  // Saved data we can't read is about to be overwritten by a fresh team: keep a copy instead of losing it.
+  if (raw) try { localStorage.setItem(`${KEY}.backup-${Date.now()}`, raw); } catch { /* ignore */ }
   const t = newTeam('My M-C Team');
   return {teams: [t], activeId: t.id, source: FORMAT.sources[0].key};
 }
@@ -89,6 +92,8 @@ export function useStore() {
     rename: (name: string) => updateTeam(t => ({...t, name}), 'rename'),
     setSuggestPrefs: (patch: Pick<Team, 'hidden' | 'noMegas'>) => updateTeam(t => ({...t, ...patch})),
     setPlaymat: (m: Team['playmat'], key?: string) => updateTeam(t => ({...t, playmat: m}), key),
+    setMatches: (fn: (m: NonNullable<Team['matches']>) => NonNullable<Team['matches']>, key?: string) =>
+      updateTeam(t => ({...t, matches: fn(t.matches ?? [])}), key),
     select: (id: string) => setState(s => ({...s, activeId: id})),
     create: (sets: PokemonSet[] = [], name?: string) => {
       const t = {...newTeam(name), sets};

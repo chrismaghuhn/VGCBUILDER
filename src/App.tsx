@@ -7,6 +7,8 @@ import {AnalysisView} from './components/AnalysisView';
 import {BulkView} from './components/BulkView';
 import {CalcView, makeSide, type Side} from './components/CalcView';
 import {PlaymatView} from './components/PlaymatView';
+import {MatchesView} from './components/MatchesView';
+import {fetchReplay, guessMe, replayPlaymat} from './lib/replay';
 import {MetaView} from './components/MetaView';
 import {OffenseView} from './components/OffenseView';
 import {PasteDialog} from './components/PasteDialog';
@@ -28,6 +30,7 @@ const PAGES = [
   {key: 'bulk', label: 'Bulk'},
   {key: 'meta', label: 'Meta'},
   {key: 'playmat', label: 'Playmat'},
+  {key: 'matches', label: 'Matches'},
   {key: 'calc', label: 'Calc'},
 ] as const;
 type Page = (typeof PAGES)[number]['key'];
@@ -138,8 +141,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Team row: shared by all pages except the Playmat, where the team is on the board */}
-      {page !== 'playmat' && (
+      {/* Team row: shared by all pages except the Playmat (team is on the board) and Matches (a log, not editing) */}
+      {page !== 'playmat' && page !== 'matches' && (
         <div className="panel mb-5 p-3">
           <div className="mb-2.5 flex flex-wrap items-center gap-2">
             {store.teams.length > 1 && (
@@ -225,7 +228,24 @@ export default function App() {
       {page === 'speed' && <SpeedView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
       {page === 'bulk' && <BulkView sets={sets} usage={usage} weather={weather} selected={planSel} onUpdateSet={(i, s) => setSlot(i, s)} onStep={setPage} />}
       {page === 'meta' && <MetaView sets={sets} usage={usage} weather={weather} onCalc={(x, y) => { setCalcPair([makeSide(x), makeSide(y)]); setPage('calc'); }} />}
-      {page === 'playmat' && <PlaymatView sets={sets} usage={usage} mat={team.playmat} onChange={store.setPlaymat} />}
+      {page === 'playmat' && (
+        <PlaymatView sets={sets} usage={usage} mat={team.playmat} onChange={store.setPlaymat}
+          savedReplays={(team.matches ?? []).map(m => m.replay ?? '')}
+          onSaveMatch={m => store.setMatches(ms => [...ms, m])} />
+      )}
+      {page === 'matches' && (
+        <MatchesView sets={sets} usage={usage} matches={team.matches ?? []} onChange={store.setMatches}
+          teams={store.teams.map(t => ({id: t.id, name: t.name, games: t.matches?.length ?? 0}))} teamId={team.id} onTeam={store.select}
+          playmatOpp={team.playmat && !team.playmat.replay ? team.playmat.opp : undefined}
+          onOpenReplay={async m => {
+            if (!m.replay) return;
+            try {
+              const r = await fetchReplay(m.replay);
+              store.setPlaymat(replayPlaymat(r, m.side ?? guessMe(r, sets, null), sets, usage));
+              setPage('playmat');
+            } catch (e) { alert((e as Error).message); }
+          }} />
+      )}
       {page === 'calc' && <CalcView sets={sets} usage={usage} pair={calcPair} setPair={setCalcPair} />}
 
       <footer className={`mt-12 border-t border-line pt-4 text-[11.5px] text-faint ${page === 'playmat' ? 'hidden' : ''}`}>
