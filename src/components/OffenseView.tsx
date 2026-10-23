@@ -1,6 +1,6 @@
 import {useDeferredValue, useMemo, useState} from 'react';
 import {MOVES, STAT_LABEL, TYPE_COLOR, pct, type UsageSource} from '../lib/data';
-import {metaWeather, teamField} from '../lib/analysis';
+import {metaWeather, warWeather, teamField} from '../lib/analysis';
 import {metaThreats, type FieldOpts} from '../lib/calc';
 import {attackStat, bestMoveOn, hitOn, koNeed, kos, type KeptKo, type KoContext, type KoNeed} from '../lib/offense';
 import {applySps} from '../lib/speed';
@@ -47,8 +47,8 @@ export function OffenseView({sets, usage, weather, selected, onUpdateSet}: {
     // Pass 1: damage per (target, move); pass 2: needs that keep every KO the set already has.
     const hits: (Omit<Row, 'need'> & {targetSet: PokemonSet; ctx: KoContext; ok: boolean})[] = [];
     for (const t of metaThreats(usage, limit)) {
-      const own = weather.enemy ? metaWeather(t.name, usage) : null;
-      const w = own?.weather ?? baseWeather;
+      const own = warWeather(weather.enemy === 'off' ? null : metaWeather(t.name, usage), weather.enemy, sets, usage);
+      const w = own && !own.kept ? own.weather : baseWeather;
       const field: FieldOpts = {
         weather: w, terrain: auto.electricTerrain ? 'Electric' : '', helpingHand, singleTarget,
         reflect: screens, lightScreen: screens,

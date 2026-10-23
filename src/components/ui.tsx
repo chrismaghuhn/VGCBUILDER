@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {TYPE_COLOR, portraitUrl} from '../lib/data';
-import {WEATHER_LABEL, type Weather} from '../lib/analysis';
+import {WEATHER_LABEL, type EnemyMode, type Weather} from '../lib/analysis';
 
 export type WeatherPref = 'auto' | Weather;
 
@@ -9,9 +9,9 @@ export const WEATHER_COLOR: Record<Weather, string> = {'': '#5b6782', Rain: '#5a
 export interface WeatherState {
   pref: WeatherPref;
   setPref: (w: WeatherPref) => void;
-  /** Threats use the weather their own team usually brings. */
-  enemy: boolean;
-  setEnemy: (on: boolean) => void;
+  /** Whether threats play under the weather their own team usually brings (see EnemyMode). */
+  enemy: EnemyMode;
+  setEnemy: (m: EnemyMode) => void;
 }
 
 /** "Auto" follows the weather my team sets itself. */
@@ -22,13 +22,13 @@ export function WeatherControls({state, auto}: {state: WeatherState; auto: Weath
         <option value="auto">Auto · {WEATHER_LABEL[auto]}</option>
         {(Object.keys(WEATHER_LABEL) as Weather[]).map(w => <option key={w} value={w}>{WEATHER_LABEL[w]}</option>)}
       </select>
-      <button
-        className={`btn !py-1 text-xs ${state.enemy ? '!border-warn !bg-warn/15 text-warn' : ''}`}
-        onClick={() => state.setEnemy(!state.enemy)}
-        title="Threats play under the weather their team usually brings (rain, sun, sand, snow)"
-      >
-        Enemy weather {state.enemy ? 'on' : 'off'}
-      </button>
+      <select className={`field !w-auto !py-1 text-xs ${state.enemy !== 'off' ? '!border-warn text-warn' : ''}`} value={state.enemy}
+        onChange={e => state.setEnemy(e.target.value as EnemyMode)} aria-label="Enemy weather"
+        title={'Off: your weather everywhere. Worst case: their weather always wins. Realistic: the setter that acts last wins (the slower lead setter; a Mega setter after all switch-ins).'}>
+        <option value="off">Enemy weather: off</option>
+        <option value="worst">Enemy weather: worst case</option>
+        <option value="realistic">Enemy weather: realistic</option>
+      </select>
     </>
   );
 }

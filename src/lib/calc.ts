@@ -186,7 +186,7 @@ export function threatMatrix(
   };
   return threats.map(threat => {
     const own = enemyWeather?.(threat.name) ?? null;
-    const rowField: SpeedField = own ? {...field, weather: own.weather} : field;
+    const rowField: SpeedField = own && !own.kept ? {...field, weather: own.weather} : field;
     const calcField: FieldOpts = {weather: rowField.weather, terrain: rowField.electricTerrain ? 'Electric' : ''};
     const speeds = speedsFor(rowField);
     const tSpeed = effectiveSpeed(threat.set, {weather: rowField.weather, electricTerrain: rowField.electricTerrain}).speed;
@@ -207,7 +207,7 @@ export function threatMatrix(
     const n = Math.max(1, sets.length);
     const danger = Math.max(0, Math.min(1,
       0.15 + (ohkos * 0.6 + twohko * 0.3) / n - myAnswers * 0.12 - myFastOhko * 0.15));
-    return {threat, cells, danger, weather: own && own.weather !== field.weather ? own : undefined};
+    return {threat, cells, danger, weather: own && (own.weather !== field.weather || own.why) ? own : undefined};
   });
 }
 
