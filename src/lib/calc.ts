@@ -21,9 +21,15 @@ export interface FieldOpts {
   tailwindAtk?: boolean;
   crit?: boolean;
   singleTarget?: boolean; // spread move hitting only one target
+  /** The attacker is burned (halves physical damage unless Guts etc.). */
+  burn?: boolean;
+  /** Hits of a variable multi-hit move (Bullet Seed 2–5, Population Bomb 1–10). */
+  hits?: number;
+  /** The attacker's partner has Steely Spirit (Steel moves ×1.5). */
+  steelySpirit?: boolean;
 }
 
-export function toCalcPokemon(set: PokemonSet, boosts: Boosts = {}, hpPercent = 100): Pokemon {
+export function toCalcPokemon(set: PokemonSet, boosts: Boosts = {}, hpPercent = 100, burned = false): Pokemon {
   const forme = battleForme(set);
   const sp = SPECIES[forme];
   const p = new Pokemon(GEN, sp?.calcName ?? forme, {
@@ -33,6 +39,7 @@ export function toCalcPokemon(set: PokemonSet, boosts: Boosts = {}, hpPercent = 
     ability: sp?.mega ? sp.abilities[0] : set.ability,
     item: set.item || undefined,
     boosts,
+    status: burned ? 'brn' : undefined,
   });
   if (hpPercent < 100) p.originalCurHP = Math.max(1, Math.floor((p.maxHP() * hpPercent) / 100));
   return p;
@@ -43,7 +50,7 @@ export function makeField(opts: FieldOpts = {}): Field {
     gameType: 'Doubles',
     weather: opts.weather || undefined,
     terrain: opts.terrain || undefined,
-    attackerSide: {isHelpingHand: !!opts.helpingHand, isTailwind: !!opts.tailwindAtk},
+    attackerSide: {isHelpingHand: !!opts.helpingHand, isTailwind: !!opts.tailwindAtk, isSteelySpirit: !!opts.steelySpirit},
     defenderSide: {
       isReflect: !!opts.reflect, isLightScreen: !!opts.lightScreen,
       isAuroraVeil: !!opts.auroraVeil, isFriendGuard: !!opts.friendGuard,
@@ -68,9 +75,9 @@ export function runCalc(
   atkBoosts: Boosts = {}, defBoosts: Boosts = {}, defHp = 100,
 ): CalcOut | null {
   try {
-    const a = toCalcPokemon(attacker, atkBoosts);
+    const a = toCalcPokemon(attacker, atkBoosts, 100, !!opts.burn);
     const d = toCalcPokemon(defender, defBoosts, defHp);
-    const mv = new Move(GEN, move, {isCrit: !!opts.crit});
+    const mv = new Move(GEN, move, {isCrit: !!opts.crit, ...(opts.hits ? {hits: opts.hits} : {})});
     // A spread move with only one target left skips the 0.75x spread modifier.
     if (opts.singleTarget && ['allAdjacent', 'allAdjacentFoes'].includes(mv.target)) mv.target = 'normal';
     const r = calculate(GEN, a, d, mv, makeField(opts));
