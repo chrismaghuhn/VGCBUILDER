@@ -27,7 +27,9 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
   selected: number;
   onUpdateSet: (i: number, s: PokemonSet) => void;
 }) {
-  const [intimidate, setIntimidate] = useState(false);
+  // Stat drops on the attacker: -1 Atk (Intimidate, Parting Shot …) and -1 SpA (Snarl, Eerie Impulse …).
+  const [atkDrop, setAtkDrop] = useState(false);
+  const [spaDrop, setSpaDrop] = useState(false);
   const [helpingHand, setHelpingHand] = useState(false);
   const [reflect, setReflect] = useState(false);
   const [lightScreen, setLightScreen] = useState(false);
@@ -47,7 +49,7 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
       const own = weather.enemy ? metaWeather(t.name, usage) : null;
       const w = own?.weather ?? baseWeather;
       const field: FieldOpts = {weather: w, terrain: auto.electricTerrain ? 'Electric' : '', helpingHand, reflect, lightScreen};
-      const ctx: BulkContext = {field, atkBoosts: intimidate ? {atk: -1} : {}, hits: twoHits ? 2 : 1};
+      const ctx: BulkContext = {field, atkBoosts: {atk: atkDrop ? -1 : 0, spa: spaDrop ? -1 : 0}, hits: twoHits ? 2 : 1};
       const moves = t.attacks.length ? t.attacks : t.set.moves.filter(m => MOVES[m] && MOVES[m].cat !== 'Status');
       const picked = allMoves ? moves : [strongestMove(t.set, me, moves, ctx)?.move].filter((m): m is string => !!m);
       for (const move of picked) {
@@ -63,7 +65,7 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
       }
     }
     return out.sort((a, b) => b.maxPct - a.maxPct);
-  }, [me, usage, limit, baseWeather, auto.electricTerrain, weather.enemy, helpingHand, reflect, lightScreen, intimidate, twoHits, allMoves]);
+  }, [me, usage, limit, baseWeather, auto.electricTerrain, weather.enemy, helpingHand, reflect, lightScreen, atkDrop, spaDrop, twoHits, allMoves]);
 
   if (!sets.length) return <Empty />;
   const live = sets[sel];
@@ -78,7 +80,8 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
       right={
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <WeatherControls state={weather} auto={auto.weather} />
-          <Toggle on={intimidate} onClick={() => setIntimidate(v => !v)}>Intimidate</Toggle>
+          <Toggle on={atkDrop} onClick={() => setAtkDrop(v => !v)} title="Attacker at -1 Atk (Intimidate, Parting Shot …)">−1 Atk</Toggle>
+          <Toggle on={spaDrop} onClick={() => setSpaDrop(v => !v)} title="Attacker at -1 SpA (Snarl, Eerie Impulse, Parting Shot …)">−1 SpA</Toggle>
           <Toggle on={helpingHand} onClick={() => setHelpingHand(v => !v)}>Helping Hand</Toggle>
           <Toggle on={reflect} onClick={() => setReflect(v => !v)}>Reflect</Toggle>
           <Toggle on={lightScreen} onClick={() => setLightScreen(v => !v)}>Light Screen</Toggle>
