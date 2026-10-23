@@ -6,6 +6,7 @@ import {bulkNeed, strongestMove, survives, type BulkContext, type BulkNeed, type
 import {applySps} from '../lib/speed';
 import type {PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
+import {PixelLock} from './icons';
 import {PlanBar, type PlanStep} from './PlanBar';
 import {koLabel} from './MetaView';
 import {Portrait, Section, WeatherChip, WeatherControls, dmgColor, type WeatherState} from './ui';
@@ -144,7 +145,7 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet, onStep}: 
 function NeedChip({need, me, onApply}: {need: BulkNeed; me: PokemonSet; onApply: (s: PokemonSet) => void}) {
   if (need.kind === 'done') return <span className="text-[11.5px] text-good">✓ survives</span>;
   if (need.kind === 'impossible') return <span className="text-[11.5px] text-faint">✗ out of reach</span>;
-  if (need.kind === 'locked') return <span className="text-[11.5px] text-info" title="Reachable only by changing a locked stat">🔒 needs locked SP</span>;
+  if (need.kind === 'locked') return <span className="inline-flex items-center gap-1 text-[11.5px] text-info" title="Reachable only by changing a locked stat"><PixelLock /> needs locked SP</span>;
   const nature = need.kind === 'sp' ? undefined : need.nature;
   const {set, taken} = applySps(me, {hp: need.hp, [need.stat]: need.def}, nature, need.protect);
   const label = `${nature ? `${nature} · ` : ''}HP ${need.hp} · ${STAT_LABEL[need.stat]} ${need.def}`;

@@ -4,6 +4,7 @@ import {effectiveSpeed, metaSpeeds, teamField, teamSpeeds, type SpeedEntry, type
 import {applySpeed, speedNeed, type SpeedNeed} from '../lib/speed';
 import {battleForme, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
+import {PixelLock} from './icons';
 import {PlanBar, type PlanStep} from './PlanBar';
 import {Portrait, Section, WeatherControls, type WeatherState} from './ui';
 
@@ -169,7 +170,7 @@ function NeedChip({need, trickRoom, onApply, me}: {need: SpeedNeed; trickRoom: b
   if (need.kind === 'done') return <span className="text-[11.5px] text-good">✓ {trickRoom ? 'slower' : 'faster'}</span>;
   if (need.kind === 'tie') return <span className="text-[11.5px] text-warn">speed tie at best</span>;
   if (need.kind === 'impossible') return <span className="text-[11.5px] text-faint">✗ out of reach</span>;
-  if (need.kind === 'locked') return <span className="text-[11.5px] text-info" title="Reachable only by changing a locked stat">🔒 needs locked SP</span>;
+  if (need.kind === 'locked') return <span className="inline-flex items-center gap-1 text-[11.5px] text-info" title="Reachable only by changing a locked stat"><PixelLock /> needs locked SP</span>;
   const nature = need.kind === 'nature' ? need.nature : undefined;
   const {taken} = applySpeed(me, need.sp, nature);
   const detail = `Set ${nature ? `${nature}, ` : ''}Spe ${need.sp} SP${taken.length ? ` (takes ${taken.map(([s, n]) => `${n} from ${STAT_LABEL[s]}`).join(', ')})` : ''}`;

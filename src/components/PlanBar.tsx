@@ -1,5 +1,6 @@
 import {SP_TOTAL, STAT_LABEL, STATS, type StatID} from '../lib/data';
 import type {PokemonSet} from '../lib/team';
+import {PixelLock} from './icons';
 
 export type PlanStep = 'offense' | 'speed' | 'bulk';
 
@@ -51,7 +52,7 @@ function LockBar({set, onChange}: {set: PokemonSet; onChange: (s: PokemonSet) =>
           <button key={s} onClick={() => toggle(s)} title={on ? 'Unlock' : 'Lock: suggestions keep this stat as it is'}
             className={`num flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] transition ${on ? 'border-info bg-info/15 text-info' : 'border-line text-dim hover:text-ink'}`}>
             <span>{STAT_LABEL[s]} {set.sps[s]}</span>
-            <span className="text-[10px]">{on ? '🔒' : '🔓'}</span>
+            <PixelLock open={!on} className={on ? '' : 'opacity-50'} />
           </button>
         );
       })}

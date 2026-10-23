@@ -6,6 +6,7 @@ import {attackStat, bestMoveOn, hitOn, koNeed, kos, type KeptKo, type KoContext,
 import {applySps} from '../lib/speed';
 import type {PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
+import {PixelLock} from './icons';
 import {koLabel} from './MetaView';
 import {PlanBar, type PlanStep} from './PlanBar';
 import {Portrait, Section, WeatherChip, WeatherControls, type WeatherState} from './ui';
@@ -144,7 +145,7 @@ export function OffenseView({sets, usage, weather, selected, onUpdateSet, onStep
 function NeedChip({need, me, goal, onApply}: {need: KoNeed; me: PokemonSet; goal: string; onApply: (s: PokemonSet) => void}) {
   if (need.kind === 'done') return <span className="text-[11.5px] text-good">✓ {goal.slice(0, -1)}</span>;
   if (need.kind === 'impossible') return <span className="text-[11.5px] text-faint">✗ out of reach</span>;
-  if (need.kind === 'locked') return <span className="text-[11.5px] text-info" title="Reachable only by changing a locked stat">🔒 needs locked SP</span>;
+  if (need.kind === 'locked') return <span className="inline-flex items-center gap-1 text-[11.5px] text-info" title="Reachable only by changing a locked stat"><PixelLock /> needs locked SP</span>;
   const nature = need.kind === 'sp' ? undefined : need.nature;
   const {set, taken} = applySps(me, {[need.stat]: need.sp}, nature, need.protect);
   const label = `${nature ? `${nature} · ` : ''}${STAT_LABEL[need.stat]} ${need.sp}`;
