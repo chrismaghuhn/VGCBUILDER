@@ -4,6 +4,7 @@ import {WEATHER_LABEL, teamField} from '../lib/analysis';
 import {metaSet} from '../lib/calc';
 import {leadAdvice, rankPlans} from '../lib/matchup';
 import {activeFighters, autoTargets, keyOf, matCalc, matHits, newPlaymat, planMove, turnOrder, type Fighter} from '../lib/playmat';
+import {fetchReplay, guessMe, parseReplay, replayId, replayPerspective, replayPlaymat, showStep, type ParsedReplay, type PSide} from '../lib/replay';
 import {decodeShare, fetchPokepaste, pokepasteId, sharePayload} from '../lib/share';
 import {battleForme, importTeam, type MatAction, type MatField, type MatNote, type MatSide, type Playmat, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
@@ -17,14 +18,18 @@ const BOARD_BG =
 
 const NOTE_COLORS: Record<MatNote['color'], string> = {gold: '#f5c542', blue: '#5aa9ff', red: '#f0566a', green: '#3ecf8e'};
 
-export function PlaymatView({sets, usage, mat, onChange}: {
+type Panel = 'suggest' | 'help' | 'replay' | 'log';
+
+export function PlaymatView({sets: mySets, usage, mat, onChange}: {
   sets: PokemonSet[];
   usage: UsageSource;
   mat?: Playmat;
   onChange: (m: Playmat | undefined, coalesceKey?: string) => void;
 }) {
+  // A replay brings its own team for the bottom side.
+  const sets = mat?.replay ? mat.replay.mine : mySets;
   const [selected, setSelected] = useState<string | null>(null);
-  const [panel, setPanel] = useState<'suggest' | 'help' | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(mat?.replay ? 'log' : null);
   const [drag, setDrag] = useState<Drag | null>(null);
   // Moves: 1-4 / Shift+1-4 pick for the left / right Pokémon of `aimSide`, Tab switches sides.
   const [aimSide, setAimSide] = useState<MatSide>('mine');
@@ -44,8 +49,22 @@ export function PlaymatView({sets, usage, mat, onChange}: {
     [sets, mat?.opp, usage], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  if (!sets.length) return <Empty />;
-  if (!mat) return <OpponentPicker usage={usage} onSet={(name, opp) => onChange(newPlaymat(name, opp, sets, usage))} />;
+  const openReplay = (r: ParsedReplay, hint: PSide | null) => {
+    onChange(replayPlaymat(r, guessMe(r, mySets, hint), mySets, usage));
+    setPanel('log');
+    setSelected(null);
+  };
+
+  if (!mat) {
+    return (
+      <div className="space-y-4">
+        {mySets.length ? <OpponentPicker usage={usage} onSet={(name, opp) => onChange(newPlaymat(name, opp, sets, usage))} /> : <Empty />}
+        <Section title="Or watch a Showdown replay">
+          <ReplayImport onLoad={openReplay} />
+        </Section>
+      </div>
+    );
+  }
 
   const set = (patch: Partial<Playmat>, key?: string) => onChange({...mat, ...patch}, key);
   const setField = (patch: Partial<MatField>) => set({field: {...mat.field, ...patch}});
@@ -130,10 +149,29 @@ export function PlaymatView({sets, usage, mat, onChange}: {
     if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Tab') { e.preventDefault(); setAimSide(s => (s === 'mine' ? 'theirs' : 'mine')); return; }
+    if (mat.replay && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      goto(mat.replay.step + (e.key === 'ArrowLeft' ? -1 : 1));
+      return;
+    }
     const m = /^Digit([1-4])$/.exec(e.code);
     if (!m) return;
     e.preventDefault();
     chooseMove(aimSide, e.shiftKey ? 1 : 0, +m[1] - 1);
+  };
+
+  /** Replay: show step n (stepping coalesces into one undo entry). */
+  const goto = (n: number) => {
+    if (!mat.replay || n < 0 || n >= mat.replay.replay.steps.length) return;
+    setSelected(null);
+    onChange(showStep(mat, n), 'replay-step');
+  };
+  const exitReplay = () => {
+    const r = mat.replay!;
+    const them = r.me === 'p1' ? 'p2' : 'p1';
+    // Keep practising against their team with your own.
+    onChange(mySets.length ? newPlaymat(`${r.replay.players[them]}`, mat.opp, mySets, usage) : undefined);
+    setPanel(null);
   };
 
   /** The Pokémon under the cursor, else the nearest one within reach. */
@@ -198,17 +236,26 @@ export function PlaymatView({sets, usage, mat, onChange}: {
     // The mat is the whole page; everything else floats on top of it when needed.
     <section className="relative flex h-[calc(100vh-88px)] min-h-[620px] flex-col overflow-hidden rounded-2xl border border-line-2" style={{background: BOARD_BG}}>
       <Toolbar
-        name={mat.name}
+        name={mat.replay ? mat.name : `vs ${mat.name}`}
         field={mat.field}
         onField={setField}
         onNote={addNote}
         onChangeOpponent={() => onChange(undefined)}
         panel={panel}
         onPanel={p => setPanel(panel === p ? null : p)}
+        replay={!!mat.replay}
         aimSide={aimSide}
         onAimSide={() => setAimSide(aimSide === 'mine' ? 'theirs' : 'mine')}
         onClearMoves={Object.keys(mat.actions ?? {}).length ? () => set({actions: {}}) : undefined}
       />
+
+      {mat.replay && (
+        <ReplayBar mat={mat} onStep={goto} onLog={() => setPanel(panel === 'log' ? null : 'log')} logOpen={panel === 'log'} onExit={exitReplay}
+          onSwap={() => {
+            const r = mat.replay!;
+            onChange(showStep(replayPlaymat(r.replay, r.me === 'p1' ? 'p2' : 'p1', mySets, usage, r.turnNotes), r.step));
+          }} />
+      )}
 
       {/* Everything below the toolbar; floating cards anchor here */}
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -294,6 +341,20 @@ export function PlaymatView({sets, usage, mat, onChange}: {
           )}
         </Floating>
       )}
+      {panel === 'replay' && (
+        <Floating side="left" title="Import a Showdown replay" onClose={() => setPanel(null)}>
+          <ReplayImport onLoad={openReplay} />
+        </Floating>
+      )}
+      {panel === 'log' && mat.replay && (
+        <Floating side="left" title={turnTitle(mat.replay.replay.steps[mat.replay.step]?.turn ?? 0)} onClose={() => setPanel(null)}>
+          <TurnLog mat={mat} onNote={text => {
+            const r = mat.replay!;
+            const turn = r.replay.steps[r.step].turn;
+            set({replay: {...r, turnNotes: {...r.turnNotes, [turn]: text}}}, `turn-note-${turn}`);
+          }} />
+        </Floating>
+      )}
       {panel === 'help' && (
         <Floating side="left" title="How it works" onClose={() => setPanel(null)}>
           <ul className="space-y-1.5 text-[12.5px] text-dim">
@@ -303,6 +364,7 @@ export function PlaymatView({sets, usage, mat, onChange}: {
             <li><b className="text-ink">1–4</b> picks a move for the left Pokémon, <b className="text-ink">Shift+1–4</b> for the right one, <b className="text-ink">Tab</b> switches to the other side.</li>
             <li><b className="text-ink">Right-drag</b> from a Pokémon onto its target draws the attack with its damage. Spread moves aim themselves. Drag a damage label along its arrow, double-click it to reset.</li>
             <li>Add notes and drag them anywhere on the field.</li>
+            <li><b className="text-ink">Replay</b> loads a Showdown replay; <b className="text-ink">← →</b> step through its turns, each with its own notes.</li>
             <li>The dot under your bench Pokémon marks the four you bring.</li>
           </ul>
         </Floating>
@@ -385,7 +447,8 @@ function fighterByKey(mat: Playmat, sets: PokemonSet[], key: string): Fighter | 
   return s ? {side, index, set: s, key} : null;
 }
 
-function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel, aimSide, onAimSide, onClearMoves}: {
+function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel, replay, aimSide, onAimSide, onClearMoves}: {
+  replay: boolean;
   aimSide: MatSide;
   onAimSide: () => void;
   onClearMoves?: () => void;
@@ -394,8 +457,8 @@ function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel
   onField: (p: Partial<MatField>) => void;
   onNote: () => void;
   onChangeOpponent: () => void;
-  panel: 'suggest' | 'help' | null;
-  onPanel: (p: 'suggest' | 'help') => void;
+  panel: Panel | null;
+  onPanel: (p: Panel) => void;
 }) {
   const chip = (on: boolean) => `rounded-md border px-2 py-0.5 text-[11.5px] transition ${on ? 'border-gold bg-gold/15 text-gold' : 'border-white/10 text-dim hover:text-ink'}`;
   const sideToggle = (label: string, key: 'tailwind' | 'reflect' | 'lightScreen') => (
@@ -411,10 +474,11 @@ function Toolbar({name, field, onField, onNote, onChangeOpponent, panel, onPanel
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-white/5 bg-black/25 px-4 py-2 text-[12px]">
       <span className="flex items-center gap-2">
-        <span className="font-display text-[14px] font-semibold">vs {name}</span>
+        <span className="font-display text-[14px] font-semibold">{name}</span>
         <button className="text-[11.5px] text-faint underline hover:text-ink" onClick={onChangeOpponent}>change</button>
       </span>
       <button className={chip(panel === 'suggest')} onClick={() => onPanel('suggest')}>Suggest</button>
+      {!replay && <button className={chip(panel === 'replay')} onClick={() => onPanel('replay')}>Replay</button>}
       <button className={chip(false)} onClick={onAimSide} title="Which side 1–4 picks moves for (Tab)">
         moves: <span className={aimSide === 'mine' ? 'text-info' : 'text-bad'}>{aimSide === 'mine' ? 'you' : 'them'}</span> <kbd className="text-faint">⇥</kbd>
       </button>
@@ -797,7 +861,7 @@ function Arrows({mat, sets, fighters, anchors, obstacles, aim, onLabel}: {
   };
   const aimed = Object.fromEntries(fighters.map(f => [f.key, targetsOf(f)]));
   const taken = [...obstacles];
-  const arrows: {id: string; from: string; to: string; at: (t: number) => Point; color: string; d: string; mid: Point; move: string; out: ReturnType<typeof matCalc>}[] = [];
+  const arrows: {id: string; from: string; to: string; at: (t: number) => Point; color: string; d: string; mid: Point; move: string; out: ReturnType<typeof matCalc>; real?: string}[] = [];
   for (const f of fighters) {
     const a = mat.actions?.[f.key];
     if (!a || !anchors[f.key]) continue;
@@ -808,13 +872,14 @@ function Arrows({mat, sets, fighters, anchors, obstacles, aim, onLabel}: {
       const {d, at} = curve(anchors[f.key], anchors[t], ally ? 46 : mutual ? 62 : 34);
       const out = !ally && MOVES[a.move]?.cat !== 'Status' ? matCalc(mat, f, byKey[t], a.move) : null;
       const ko = out ? koLabel({move: a.move, minPct: out.minPct, maxPct: out.maxPct, koText: out.koText, koN: out.koN, koChance: out.koChance}) : null;
-      const text = `${a.move}  ${out ? `${pct(out.minPct, 0)}–${pct(out.maxPct, 0)}  ${ko && ko.ko !== '—' ? ko.ko + (ko.chance ? ' ' + ko.chance : '') : ''}` : ''}`;
+      const real = a.results?.[t];
+      const text = `${real ? real + '   ' : ''}${a.move}  ${out ? `${pct(out.minPct, 0)}–${pct(out.maxPct, 0)}  ${ko && ko.ko !== '—' ? ko.ko + (ko.chance ? ' ' + ko.chance : '') : ''}` : ''}`;
       const w = textWidth(text) + 16, h = 20;
       const id = `${f.key}-${t}`;
       const manual = dragT?.id === id ? dragT.t : a.labels?.[t];
       const mid = manual !== undefined ? at(manual) : placeLabel(at, w, h, taken);
       taken.push({x: mid.x - w / 2, y: mid.y - h / 2, w, h});
-      arrows.push({id, from: f.key, to: t, at, color: ally ? ARROW.ally : ARROW[f.side], d, mid, move: a.move, out});
+      arrows.push({id, real, from: f.key, to: t, at, color: ally ? ARROW.ally : ARROW[f.side], d, mid, move: a.move, out});
     }
   }
   /** Drag a label: it slides to the point of its arrow nearest to the cursor. */
@@ -881,6 +946,7 @@ function Arrows({mat, sets, fighters, anchors, obstacles, aim, onLabel}: {
                 {ko && ko.ko !== '—' && <span className="num ml-1 text-dim">{ko.ko}{ko.chance && ` ${ko.chance}`}</span>}
               </>
             )}
+            {a.real && <span className="num ml-1.5 rounded bg-white/10 px-1 text-ink" title="What really happened">{a.real}</span>}
           </div>
         );
       })}
@@ -910,6 +976,115 @@ function MoveChips({set, action, hot, onPick, side}: {set: PokemonSet; action?: 
         </button>
       ))}
     </div>
+    </div>
+  );
+}
+
+const turnTitle = (turn: number) => (turn === 0 ? 'Leads' : `Turn ${turn}`);
+
+/** Load a replay from its link (or a pasted battle log). */
+function ReplayImport({onLoad}: {onLoad: (r: ParsedReplay, hint: PSide | null) => void}) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setError('');
+    const input = text.trim();
+    try {
+      if (input.includes('\n|') || input.startsWith('|')) { onLoad(parseReplay(input, 'pasted'), null); return; }
+      const id = replayId(input);
+      if (!id) { setError('That is not a replay link.'); return; }
+      setBusy(true);
+      const r = await fetchReplay(id);
+      if (!r.steps.length) { setError('No turns found in that replay.'); return; }
+      onLoad(r, replayPerspective(input));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div>
+      <input className="field text-[12.5px]" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && load()}
+        placeholder="https://replay.pokemonshowdown.com/gen9…" />
+      <div className="mt-2 flex items-center gap-2">
+        <button className="btn btn-gold" onClick={load} disabled={!text.trim() || busy}>{busy ? 'Loading …' : 'Load replay'}</button>
+        {error && <span className="text-[12px] text-bad">{error}</span>}
+      </div>
+      <p className="mt-2 text-[11.5px] text-faint">
+        Plays the battle turn by turn on the mat. Your side is the one with your team (or the link's ?p2). Unrevealed sets use the meta spread; moves, items and abilities seen in the battle are filled in. You can also paste the raw battle log.
+      </p>
+    </div>
+  );
+}
+
+/** Players, side swap and the turn strip of a replay. */
+function ReplayBar({mat, onStep, onLog, logOpen, onSwap, onExit}: {
+  mat: Playmat; onStep: (n: number) => void; onLog: () => void; logOpen: boolean; onSwap: () => void; onExit: () => void;
+}) {
+  const r = mat.replay!;
+  const {steps, players, winner} = r.replay;
+  const them: PSide = r.me === 'p1' ? 'p2' : 'p1';
+  const ref = useRef<HTMLDivElement>(null);
+  // Keep the current turn in view on long games.
+  useEffect(() => { ref.current?.querySelector('[data-current]')?.scrollIntoView({block: 'nearest', inline: 'center'}); }, [r.step]);
+  const btn = 'rounded-md border border-white/10 px-2 py-0.5 text-[12px] text-dim hover:text-ink disabled:opacity-30';
+  return (
+    <div className="flex items-center gap-3 border-b border-white/5 bg-black/30 px-4 py-1.5 text-[12px]">
+      <span className="shrink-0">
+        <span className="text-info">{players[r.me]}</span>
+        <span className="text-faint"> vs </span>
+        <span className="text-bad">{players[them]}</span>
+        {winner && <span className="ml-1.5 text-faint">· {winner} won</span>}
+      </span>
+      <button className="shrink-0 text-[11.5px] text-faint underline hover:text-ink" onClick={onSwap} title="Watch from the other side">swap sides</button>
+      <span className="h-4 w-px shrink-0 bg-white/10" />
+      <button className={btn} onClick={() => onStep(r.step - 1)} disabled={r.step === 0} title="Previous turn (←)">◀</button>
+      <div ref={ref} className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-0.5">
+        {steps.map((s, i) => {
+          const note = r.turnNotes[s.turn]?.trim();
+          return (
+            <button key={i} data-current={i === r.step ? '' : undefined} onClick={() => onStep(i)}
+              title={`${turnTitle(s.turn)}${s.faints ? ` · ${s.faints} fainted` : ''}${note ? ` · ${note}` : ''}`}
+              className={`relative min-w-[30px] shrink-0 rounded-md border px-1.5 py-0.5 text-center num text-[11.5px] transition ${
+                i === r.step ? 'border-gold bg-gold/15 text-gold' : 'border-white/10 text-dim hover:text-ink'}`}>
+              {s.turn === 0 ? 'L' : s.turn}
+              <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 gap-0.5">
+                {s.faints > 0 && <span className="h-1 w-1 rounded-full bg-bad" />}
+                {note && <span className="h-1 w-1 rounded-full bg-gold" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <button className={btn} onClick={() => onStep(r.step + 1)} disabled={r.step >= steps.length - 1} title="Next turn (→)">▶</button>
+      <span className="h-4 w-px shrink-0 bg-white/10" />
+      <button className={`${btn} ${logOpen ? '!border-gold !text-gold' : ''}`} onClick={onLog}>Log</button>
+      <button className="shrink-0 text-[11.5px] text-faint underline hover:text-ink" onClick={onExit} title="Leave the replay and keep their team on the mat">exit replay</button>
+    </div>
+  );
+}
+
+/** What happened in the current turn, and the notes for it. */
+function TurnLog({mat, onNote}: {mat: Playmat; onNote: (text: string) => void}) {
+  const r = mat.replay!;
+  const step = r.replay.steps[r.step];
+  if (!step) return null;
+  const color = (side: PSide | null) => (side === null ? 'text-dim' : side === r.me ? 'text-info' : 'text-bad');
+  return (
+    <div>
+      <ul className="space-y-0.5 text-[12px]">
+        {step.log.map((l, i) => (
+          <li key={i} className={`${color(l.side)} ${l.kind === 'move' ? 'mt-1 font-medium' : l.kind === 'faint' ? 'font-medium' : 'pl-3 opacity-80'}`}>
+            {l.kind === 'faint' ? '✕ ' : ''}{l.text}
+          </li>
+        ))}
+        {step.log.length === 0 && <li className="text-faint">Nothing happened.</li>}
+      </ul>
+      <div className="label mb-1 mt-3">Notes for {turnTitle(step.turn).toLowerCase()}</div>
+      <textarea className="field h-20 resize-none text-[12.5px]" value={r.turnNotes[step.turn] ?? ''} onChange={e => onNote(e.target.value)}
+        placeholder="What should have happened? What did you learn?" />
     </div>
   );
 }

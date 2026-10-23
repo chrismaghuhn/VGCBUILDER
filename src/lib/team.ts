@@ -1,3 +1,4 @@
+import type {ReplayMat} from './replay';
 import {
   ITEM_NAMES, MOVES, NATURES, SP_MAX, SP_TOTAL, SPECIES, STAT_LABEL, STATS,
   getItem, getSpecies, megaForme, type StatID, type StatTable, type UsageSource,
@@ -61,12 +62,16 @@ export interface Playmat {
   notes: MatNote[];
   /** Planned move per Pokémon on the field (keyed like hp) and whom it hits. */
   actions?: Record<string, MatAction>;
+  /** Set when the mat plays back a Showdown replay. */
+  replay?: ReplayMat;
 }
 
 export interface MatAction {
   move: string;
   /** Fighter keys it hits; empty = not aimed yet (or a move without a target). */
   targets: string[];
+  /** What really happened per target, from a replay ("−34%", "KO", "Protect" …). */
+  results?: Record<string, string>;
   /** Label position along the arrow (0-1) per target, when the player moved it. */
   labels?: Record<string, number>;
 }
