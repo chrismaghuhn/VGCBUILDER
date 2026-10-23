@@ -1,7 +1,8 @@
 import {useMemo, useState} from 'react';
 import {pct, type UsageSource} from '../lib/data';
 import {ARCHETYPES, archetypeOf, emptyMatch, matchesCsv, matchFromReplay, matchStats, winrate, type Match, type Tally} from '../lib/matches';
-import {fetchReplay, guessMe, replayId, replayPerspective} from '../lib/replay';
+import {fetchReplay, guessMe, replayId, replayPerspective, type ParsedReplay, type PSide} from '../lib/replay';
+import {SPECIES} from '../lib/data';
 import type {PokemonSet} from '../lib/team';
 import {speciesOptions} from './SetEditor';
 import {Combobox, Portrait, Section} from './ui';
@@ -89,6 +90,8 @@ function MatchForm({draft, setDraft, sets, usage, playmatOpp, onSave, editing}: 
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The replay the form was filled from, to switch sides afterwards.
+  const [source, setSource] = useState<{r: ParsedReplay; me: PSide} | null>(null);
   const spOpts = useMemo(() => speciesOptions(usage, draft.oppTeam), [usage, draft.oppTeam]);
   const set = (patch: Partial<Match>) => setDraft({...draft, ...patch});
 
@@ -101,6 +104,7 @@ function MatchForm({draft, setDraft, sets, usage, playmatOpp, onSave, editing}: 
       const r = await fetchReplay(id);
       const me = guessMe(r, sets, replayPerspective(link));
       setDraft({...matchFromReplay(r, me, usage, sets), id: draft.id, notes: draft.notes});
+      setSource({r, me});
       setLink('');
     } catch (e) {
       setError((e as Error).message);
@@ -129,7 +133,15 @@ function MatchForm({draft, setDraft, sets, usage, playmatOpp, onSave, editing}: 
     return [leads, back.filter(x => x !== s)];
   };
 
-  const myTeam = sets.map(s => s.species);
+  const myTeam = draft.myTeam?.length ? draft.myTeam : sets.map(s => s.species);
+  const nums = new Set(sets.map(s => SPECIES[s.species]?.num));
+  const overlap = myTeam.filter(s => nums.has(SPECIES[s]?.num)).length;
+  const swap = () => {
+    if (!source) return;
+    const me: PSide = source.me === 'p1' ? 'p2' : 'p1';
+    setDraft({...matchFromReplay(source.r, me, usage, sets), id: draft.id, notes: draft.notes});
+    setSource({...source, me});
+  };
   return (
     <div className="space-y-4">
       <div>
@@ -139,6 +151,13 @@ function MatchForm({draft, setDraft, sets, usage, playmatOpp, onSave, editing}: 
           <button className="btn shrink-0" onClick={fromReplay} disabled={!link.trim() || busy}>{busy ? 'Loading …' : 'Fill from replay'}</button>
         </div>
         {error && <p className="mt-1 text-[12px] text-bad">{error}</p>}
+        {source && draft.replay === source.r.id && (
+          <p className="mt-1.5 text-[12px] text-dim">
+            You are <span className="text-info">{source.r.players[source.me]}</span>
+            <button className="ml-2 text-faint underline hover:text-ink" onClick={swap}>swap sides</button>
+            {overlap < 3 && sets.length > 0 && <span className="ml-2 text-warn">· only {overlap} of your Pokémon on this side: is this game from this team?</span>}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

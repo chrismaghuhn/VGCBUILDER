@@ -13,6 +13,8 @@ export interface Match {
   opponent: string;
   /** Their six from team preview. */
   oppTeam: string[];
+  /** My six in that game (from a replay); missing = the team's own Pokémon. */
+  myTeam?: string[];
   archetype: string;
   myLeads: string[];
   myBack: string[];
@@ -58,6 +60,7 @@ export function matchFromReplay(r: ParsedReplay, me: PSide, usage: UsageSource, 
     result: !r.winner ? 'tie' : r.winner === r.players[me] ? 'win' : 'loss',
     opponent: r.players[them],
     oppTeam: r.teams[them].slice(0, 6),
+    myTeam: r.teams[me].slice(0, 6).map((_, i) => name(me, i)),
     archetype: archetypeOf(r.teams[them], usage),
     myLeads: leads(me),
     myBack: back(me),
