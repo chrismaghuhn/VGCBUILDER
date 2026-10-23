@@ -86,6 +86,7 @@ export function useStore() {
     setSource: (source: string) => setState(s => ({...s, source})),
     setSets,
     rename: (name: string) => updateTeam(t => ({...t, name}), 'rename'),
+    setSuggestPrefs: (patch: Pick<Team, 'hidden' | 'noMegas'>) => updateTeam(t => ({...t, ...patch})),
     select: (id: string) => setState(s => ({...s, activeId: id})),
     create: (sets: PokemonSet[] = [], name?: string) => {
       const t = {...newTeam(name), sets};

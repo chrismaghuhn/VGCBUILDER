@@ -228,7 +228,16 @@ export interface Suggestion {
   usage: number;
 }
 
-export function suggestTeammates(sets: PokemonSet[], usage: UsageSource, problemThreats: MetaThreat[], limit = 12): Suggestion[] {
+export interface SuggestOptions {
+  /** Never suggest these (user hid them). */
+  hidden?: string[];
+  noMegas?: boolean;
+}
+
+export function suggestTeammates(
+  sets: PokemonSet[], usage: UsageSource, problemThreats: MetaThreat[], limit = 12, opts: SuggestOptions = {},
+): Suggestion[] {
+  const hidden = new Set(opts.hidden ?? []);
   const taken = new Set(sets.map(s => SPECIES[s.species]?.num));
   const takenItems = sets.map(s => s.item);
   const megaCount = sets.filter(s => SPECIES[battleForme(s)]?.mega).length;
@@ -242,7 +251,7 @@ export function suggestTeammates(sets: PokemonSet[], usage: UsageSource, problem
   const candidates = Object.entries(usage.mons)
     .sort((a, b) => b[1].usage - a[1].usage)
     .slice(0, 90)
-    .filter(([n]) => SPECIES[n] && !taken.has(SPECIES[n].num));
+    .filter(([n]) => SPECIES[n] && !taken.has(SPECIES[n].num) && !hidden.has(n) && !(opts.noMegas && SPECIES[n].mega));
 
   const results: Suggestion[] = [];
   for (const [name, u] of candidates) {

@@ -22,6 +22,9 @@ const PAGES = [
 ] as const;
 type Page = (typeof PAGES)[number]['key'];
 
+// Stable empty list so memoized suggestions don't recompute on every render.
+const EMPTY: string[] = [];
+
 const pageFromHash = (): Page => {
   const h = location.hash.slice(1);
   return (PAGES.find(p => p.key === h)?.key ?? 'bauen') as Page;
@@ -168,7 +171,15 @@ export default function App() {
             />
           ) : sets.length < 6 ? (
             // Phase 1: keep picking. After a pick the next empty slot opens right away.
-            <Picker sets={sets} slot={sel} usage={usage} onPick={s => { setSlot(sel, s); setSelected(sel + 1); }} />
+            <Picker
+              sets={sets}
+              slot={sel}
+              usage={usage}
+              onPick={s => { setSlot(sel, s); setSelected(sel + 1); }}
+              hidden={team.hidden ?? EMPTY}
+              noMegas={!!team.noMegas}
+              onPrefs={store.setSuggestPrefs}
+            />
           ) : null}
         </div>
       )}

@@ -16,6 +16,10 @@ export interface Team {
   id: string;
   name: string;
   sets: PokemonSet[];
+  /** Pokémon the user hid from teammate suggestions. */
+  hidden?: string[];
+  /** Leave Mega Evolutions out of teammate suggestions. */
+  noMegas?: boolean;
 }
 
 export const emptySps = (): StatTable => ({hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0});
