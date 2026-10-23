@@ -37,7 +37,7 @@ export function SpeedView({sets, usage, weather, opp, selected, onUpdateSet}: {
   const mySpeed = me ? effectiveSpeed(me, field, true).speed : undefined;
 
   const rows = useMemo(() => {
-    const theirs = opp ? oppSpeeds(opp.sets, field, weather.enemy) : metaSpeeds(usage, limit, field, weather.enemy);
+    const theirs = opp ? oppSpeeds(opp.sets, field, weather.enemy, sets) : metaSpeeds(usage, limit, field, weather.enemy, sets);
     const all = [...teamSpeeds(sets, field), ...theirs]
       .map(r => ({...r, target: !r.mine && vsFastest && r.max ? r.max : r.speed}));
     return all.sort((a, b) => (trickRoom ? a.target - b.target : b.target - a.target) || (a.mine ? -1 : 1));

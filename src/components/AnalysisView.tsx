@@ -1,6 +1,6 @@
 import {useDeferredValue, useMemo} from 'react';
 import {SPECIES, TYPE_COLOR, type UsageSource} from '../lib/data';
-import {defensiveMatrix, metaWeather, offensiveCoverage, oppWeather, roleCoverage, teamField, type SpeedField, type TypeRow} from '../lib/analysis';
+import {defensiveMatrix, metaWeather, offensiveCoverage, oppWeather, roleCoverage, teamField, warWeather, type EnemyMode, type SpeedField, type TypeRow} from '../lib/analysis';
 import {metaThreats, teamThreats, threatMatrix} from '../lib/calc';
 import {battleForme, type Issue, type Opponent, type PokemonSet} from '../lib/team';
 import {EstBadge, Portrait, Section, TypeBadge, type WeatherState} from './ui';
@@ -121,7 +121,7 @@ export function Empty({text = 'No Pokémon in the team yet.'}: {text?: string}) 
 function Summary({sets, usage, opp, issues, matrix, roles, megas, field, enemyWeather}: {
   opp?: Opponent;
   field: SpeedField;
-  enemyWeather: boolean;
+  enemyWeather: EnemyMode;
   sets: PokemonSet[];
   usage: UsageSource;
   issues: Issue[];
@@ -133,8 +133,8 @@ function Summary({sets, usage, opp, issues, matrix, roles, megas, field, enemyWe
   const threats = useMemo(() => {
     const theirs = opp ? oppWeather(opp.sets) : null;
     const rows = opp
-      ? threatMatrix(deferred, teamThreats(opp.sets), field, enemyWeather ? () => theirs : undefined)
-      : threatMatrix(deferred, metaThreats(usage, 30), field, enemyWeather ? n => metaWeather(n, usage) : undefined);
+      ? threatMatrix(deferred, teamThreats(opp.sets), field, () => warWeather(theirs, enemyWeather, deferred))
+      : threatMatrix(deferred, metaThreats(usage, 30), field, n => warWeather(enemyWeather === 'off' ? null : metaWeather(n, usage), enemyWeather, deferred, usage));
     return rows.filter(r => r.danger >= 0.45).sort((a, b) => b.danger - a.danger).slice(0, 5);
   }, [deferred, usage, opp, field.weather, field.electricTerrain, enemyWeather]); // eslint-disable-line react-hooks/exhaustive-deps
 

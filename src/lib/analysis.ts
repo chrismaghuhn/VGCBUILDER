@@ -1,6 +1,7 @@
 import typesJson from '../data/generated/types.json';
 import {MOVES, SPECIES, TYPES, type UsageSource} from './data';
 import {battleForme, parseSpread, calcStat, setStats, type PokemonSet} from './team';
+import {metaSet} from './meta';
 
 /** Attacking type → defending type → multiplier (only entries that aren't 1×); built from the calc's Champions data. */
 const TYPE_CHART = typesJson as Record<string, Record<string, number>>;
@@ -204,6 +205,64 @@ export interface EnemyWeather {
   /** The setter: the threat itself or its usual teammate. */
   source: string;
   share: number;
+  /** The setter's set when it's known (an opponent's team sheet). */
+  set?: PokemonSet;
+  /** Realistic weather war: who wins and why. */
+  why?: string;
+  /** Realistic weather war: my weather stays. */
+  kept?: boolean;
+}
+
+/** Off: my weather; worst case: theirs always wins; realistic: the setter that acts last wins. */
+export type EnemyMode = 'off' | 'worst' | 'realistic';
+
+interface Setter {weather: Weather; name: string; speed: number; mega: boolean}
+
+const setterOf = (set: PokemonSet, weather: Weather): Setter => {
+  const forme = battleForme(set);
+  return {weather, name: forme, speed: setStats(set, forme).spe, mega: !!SPECIES[forme]?.mega};
+};
+
+/** My team's first weather setter. */
+function mySetter(sets: PokemonSet[]): Setter | null {
+  for (const s of sets) {
+    const w = WEATHER_SETTERS[abilityOf(s)];
+    if (w) return setterOf(s, w);
+  }
+  return null;
+}
+
+/**
+ * The weather a threat plays under against my team, or null when nothing changes.
+ * Realistic: switch-in abilities trigger fastest first, so the slower lead setter's weather stays;
+ * a Mega setter sets its weather when it Mega Evolves at the start of the turn, after all switch-ins.
+ * A speed tie counts as their win (worst case).
+ */
+export function warWeather(theirs: EnemyWeather | null, mode: EnemyMode, mySets: PokemonSet[], usage?: UsageSource): EnemyWeather | null {
+  if (mode === 'off' || !theirs) return null;
+  if (mode === 'worst') return theirs;
+  const mine = mySetter(mySets);
+  if (!mine || mine.weather === theirs.weather) return theirs;
+  const theirSet = theirs.set ?? (usage && SPECIES[theirs.source] ? metaSet(theirs.source, usage) : undefined);
+  if (!theirSet) return theirs;
+  const them = setterOf(theirSet, theirs.weather);
+  const name = (x: Setter) => `${x.name} (${x.speed})`;
+  let mineWins: boolean, why: string;
+  if (mine.mega !== them.mega) {
+    mineWins = mine.mega;
+    const m = mine.mega ? mine : them;
+    why = `${m.name} Mega Evolves after the switch-ins, so its ${m.weather.toLowerCase()} comes last`;
+  } else if (mine.speed === them.speed) {
+    mineWins = false;
+    why = `Speed tie ${name(mine)} vs ${name(them)}: counted as theirs`;
+  } else {
+    mineWins = mine.speed < them.speed;
+    const slow = mineWins ? mine : them, fast = mineWins ? them : mine;
+    why = `${name(slow)} is slower than ${name(fast)}, so its ${slow.weather.toLowerCase()} comes last`;
+  }
+  return mineWins
+    ? {weather: mine.weather, source: mine.name, share: 1, why: `${mine.weather} stays: ${why}`, kept: true}
+    : {...theirs, why: `${theirs.weather}: ${why}`};
 }
 
 const mainAbility = (name: string, usage: UsageSource): string | undefined => {
@@ -230,7 +289,7 @@ export function metaWeather(name: string, usage: UsageSource): EnemyWeather | nu
 export function oppWeather(opp: PokemonSet[]): EnemyWeather | null {
   for (const s of opp) {
     const w = WEATHER_SETTERS[abilityOf(s)];
-    if (w) return {weather: w, source: battleForme(s), share: 1};
+    if (w) return {weather: w, source: battleForme(s), share: 1, set: s};
   }
   return null;
 }
@@ -273,7 +332,7 @@ export interface SpeedEntry {
 }
 
 /** Speed of each top meta Pokémon with its most common spread and ability. */
-export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField, enemyWeather = false): SpeedEntry[] {
+export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField, enemy: EnemyMode = 'off', mySets: PokemonSet[] = []): SpeedEntry[] {
   const out: SpeedEntry[] = [];
   const ranked = Object.entries(usage.mons).sort((a, b) => b[1].usage - a[1].usage).slice(0, limit);
   for (const [name, u] of ranked) {
@@ -284,8 +343,8 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
       return calcStat(sp.bs.spe, 'spe', sps.spe, nature);
     });
     const ability = sp.mega ? sp.abilities[0] : u.abilities[0]?.[0] ?? sp.abilities[0];
-    const own = enemyWeather ? metaWeather(name, usage) : null;
-    const weather = own?.weather ?? field.weather;
+    const own = warWeather(enemy === 'off' ? null : metaWeather(name, usage), enemy, mySets, usage);
+    const weather = own && !own.kept ? own.weather : field.weather;
     const mod = abilitySpeedMod(ability, {weather, electricTerrain: field.electricTerrain});
     const sideLabels: string[] = [];
     const apply = (raw: number) => {
@@ -305,16 +364,16 @@ export function metaSpeeds(usage: UsageSource, limit: number, field: SpeedField,
       if (w && (weather !== w || a !== ability) && p > 0.15) notes.push(`${a} ${pct(p)}: ${Math.floor(speeds[0] * 2)} in ${WEATHER_LABEL[w].toLowerCase()}`);
       if (SPEED_NOTES[a] && p > 0.15) notes.push(SPEED_NOTES[a]);
     }
-    if (own && mod.label) notes.unshift(`${WEATHER_LABEL[own.weather]} from ${own.source === name ? 'itself' : own.source}`);
+    if (own && !own.kept && mod.label) notes.unshift(`${WEATHER_LABEL[own.weather]} from ${own.source === name ? 'itself' : own.source}`);
     out.push({name, speed: top, max, mine: false, usage: u.usage, boosts: [...(mod.label ? [mod.label] : []), ...sideLabels], note: notes.join(' · ')});
   }
   return out;
 }
 
 /** Speed of each Pokémon of one opponent team, with its own spread, item and ability. */
-export function oppSpeeds(opp: PokemonSet[], field: SpeedField, enemyWeather = false): SpeedEntry[] {
-  const own = enemyWeather ? oppWeather(opp) : null;
-  const f = own ? {...field, weather: own.weather} : field;
+export function oppSpeeds(opp: PokemonSet[], field: SpeedField, enemy: EnemyMode = 'off', mySets: PokemonSet[] = []): SpeedEntry[] {
+  const own = warWeather(oppWeather(opp), enemy, mySets);
+  const f = own && !own.kept ? {...field, weather: own.weather} : field;
   return opp.filter(s => SPECIES[battleForme(s)]).map(s => {
     const {speed, labels} = effectiveSpeed(s, f);
     const notes: string[] = [];

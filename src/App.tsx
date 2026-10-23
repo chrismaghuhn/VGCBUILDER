@@ -1,7 +1,7 @@
 import {Suspense, lazy, useEffect, useMemo, useState} from 'react';
 import {FORMAT, SPECIES, TYPES, loadUsage} from './lib/data';
 import {useUsage} from './lib/useUsage';
-import {defensiveMult, roleCoverage} from './lib/analysis';
+import {defensiveMult, roleCoverage, type EnemyMode} from './lib/analysis';
 import {useStore} from './lib/store';
 import {battleForme, validateTeam, type Opponent, type PokemonSet, type SavedBoard} from './lib/team';
 import {makeSide, type Side} from './components/calcSide';
@@ -73,7 +73,7 @@ export default function App() {
   const [calcPair, setCalcPair] = useState<[Side, Side] | null>(null);
   const [weatherPref, setWeatherPref] = useState<WeatherPref>('auto');
   const [searchQuery, setSearchQuery] = useState('');
-  const [enemyWeather, setEnemyWeather] = useState(false);
+  const [enemyWeather, setEnemyWeather] = useState<EnemyMode>('off');
   const weather: WeatherState = {pref: weatherPref, setPref: setWeatherPref, enemy: enemyWeather, setEnemy: setEnemyWeather};
   // Board whose opponent Analysis, Speed, Meta and Calc work against (null = the meta).
   const [vsId, setVsId] = useState<string | null>(null);

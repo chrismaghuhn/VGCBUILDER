@@ -1,7 +1,7 @@
 import {Fragment, useDeferredValue, useMemo, useState} from 'react';
 import {SPECIES, STAT_LABEL, STATS, pct, type UsageSource} from '../lib/data';
 import {metaThreats, teamThreats, threatMatrix, type HitSummary, type MatchupCell, type MetaThreat} from '../lib/calc';
-import {metaWeather, oppWeather, teamField, type SpeedField} from '../lib/analysis';
+import {metaWeather, oppWeather, teamField, warWeather, type SpeedField} from '../lib/analysis';
 import {battleForme, type Opponent, type PokemonSet} from '../lib/team';
 import {Empty} from './AnalysisView';
 import {Bar, EstBadge, Portrait, Section, TypeBadge, WeatherChip, WeatherControls, dmgColor, type WeatherState} from './ui';
@@ -29,7 +29,9 @@ export function MetaView({sets, usage, opp, onCalc, weather}: {
   const field: SpeedField = {weather: weather.pref === 'auto' ? auto.weather : weather.pref, electricTerrain: auto.electricTerrain};
   const rows = useMemo(() => {
     const theirs = opp ? oppWeather(opp.sets) : null;
-    const r = threatMatrix(deferredSets, threats, field, weather.enemy ? (opp ? () => theirs : n => metaWeather(n, usage)) : undefined);
+    const r = threatMatrix(deferredSets, threats, field, opp
+      ? () => warWeather(theirs, weather.enemy, deferredSets)
+      : n => warWeather(weather.enemy === 'off' ? null : metaWeather(n, usage), weather.enemy, deferredSets, usage));
     return sort === 'danger' ? [...r].sort((a, b) => b.danger - a.danger) : r;
   }, [deferredSets, threats, opp, sort, field.weather, field.electricTerrain, weather.enemy, usage]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -117,7 +119,7 @@ export function MetaView({sets, usage, opp, onCalc, weather}: {
                               {row.weather && (
                                 <WeatherChip
                                   weather={row.weather.weather}
-                                  title={row.weather.source === row.threat.name ? 'sets it itself' : opp ? `from ${row.weather.source}` : `${row.weather.source} on ${Math.round(row.weather.share * 100)}% of its teams`}
+                                  title={row.weather.why ?? (row.weather.source === row.threat.name ? 'sets it itself' : opp ? `from ${row.weather.source}` : `${row.weather.source} on ${Math.round(row.weather.share * 100)}% of its teams`)}
                                 />
                               )}
                             </div>

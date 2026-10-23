@@ -1,6 +1,6 @@
 import {useDeferredValue, useMemo, useState} from 'react';
 import {MOVES, STAT_LABEL, TYPE_COLOR, pct, type UsageSource} from '../lib/data';
-import {metaWeather, teamField} from '../lib/analysis';
+import {metaWeather, warWeather, teamField} from '../lib/analysis';
 import {metaThreats, type FieldOpts} from '../lib/calc';
 import {bulkNeed, strongestMove, survives, type BulkContext, type BulkNeed, type KeptHit} from '../lib/bulk';
 import {applySps} from '../lib/speed';
@@ -49,8 +49,8 @@ export function BulkView({sets, usage, weather, selected, onUpdateSet}: {
     // Pass 1: every (threat, move) with its damage; pass 2: needs, keeping the hits already survived.
     const hits: (Omit<Row, 'need'> & {ctx: BulkContext; ok: boolean})[] = [];
     for (const t of metaThreats(usage, limit)) {
-      const own = weather.enemy ? metaWeather(t.name, usage) : null;
-      const w = own?.weather ?? baseWeather;
+      const own = warWeather(weather.enemy === 'off' ? null : metaWeather(t.name, usage), weather.enemy, sets, usage);
+      const w = own && !own.kept ? own.weather : baseWeather;
       const field: FieldOpts = {weather: w, terrain: auto.electricTerrain ? 'Electric' : '', helpingHand, reflect, lightScreen};
       const ctx: BulkContext = {field, atkBoosts: {atk: atkDrop ? -1 : 0, spa: spaDrop ? -1 : 0}, hits: twoHits ? 2 : 1};
       const moves = t.attacks.length ? t.attacks : t.set.moves.filter(m => MOVES[m] && MOVES[m].cat !== 'Status');
