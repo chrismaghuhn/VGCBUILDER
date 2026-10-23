@@ -1,0 +1,27 @@
+# Teamforge VGC: static site, HTTPS via Let's Encrypt (Caddy does it on its own).
+# setup-server.sh replaces TEAMFORGE_DOMAIN with the real name.
+TEAMFORGE_DOMAIN {
+	root * /var/www/teamforge
+	encode zstd gzip
+	file_server
+
+	# Built assets have content hashes in their names: cache them for good.
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	# Sprites and portraits change only with a data update.
+	@art path /sprites/* /portraits/*
+	header @art Cache-Control "public, max-age=604800"
+	# The page itself is always checked, so a deploy shows up right away.
+	@page path / /index.html
+	header @page Cache-Control "no-cache"
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		# Board links keep their data after the #, which browsers never send anyway; no referrer on top.
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+}

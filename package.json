@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "data": "node scripts/build-data.mjs",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "@pkmn/dex": "^0.10.11",
