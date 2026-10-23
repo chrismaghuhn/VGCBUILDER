@@ -1,29 +1,36 @@
-import {useEffect, useMemo, useState} from 'react';
-import {FORMAT, SPECIES, TYPES, USAGE} from './lib/data';
+import {Suspense, lazy, useEffect, useMemo, useState} from 'react';
+import {FORMAT, SPECIES, TYPES, loadUsage} from './lib/data';
+import {useUsage} from './lib/useUsage';
 import {defensiveMult, roleCoverage} from './lib/analysis';
 import {useStore} from './lib/store';
 import {battleForme, validateTeam, type Opponent, type PokemonSet, type SavedBoard} from './lib/team';
-import {AnalysisView} from './components/AnalysisView';
-import {BulkView} from './components/BulkView';
-import {CalcView, makeSide, type Side} from './components/CalcView';
-import {PlaymatView} from './components/PlaymatView';
-import {MatchesView} from './components/MatchesView';
-import {fetchReplay, guessMe, replayPlaymat, showStep} from './lib/replay';
+import {makeSide, type Side} from './components/calcSide';
 import {decodeMat, matPayload, type SharedMat} from './lib/matshare';
 import type {Playmat} from './lib/team';
-import {MetaView} from './components/MetaView';
-import {OffenseView} from './components/OffenseView';
 import {PasteDialog} from './components/PasteDialog';
 import {Portrait} from './components/ui';
 import {decodeShare, sharePayload} from './lib/share';
-import {Picker} from './components/Picker';
 import {SearchView} from './components/SearchView';
 import {SetEditor} from './components/SetEditor';
-import {SpeedView} from './components/SpeedView';
 import {TeamBar} from './components/TeamBar';
 import {TeamHeaderMeta, TeamNotes} from './components/TeamMeta';
 import {TeamsView} from './components/TeamsView';
 import type {WeatherPref, WeatherState} from './components/ui';
+
+// Pages that need the damage calc (and its data for every generation) load when first opened,
+// so Teams and Search start without them.
+const AnalysisView = lazy(() => import('./components/AnalysisView').then(m => ({default: m.AnalysisView})));
+const BulkView = lazy(() => import('./components/BulkView').then(m => ({default: m.BulkView})));
+const CalcView = lazy(() => import('./components/CalcView').then(m => ({default: m.CalcView})));
+const MatchesView = lazy(() => import('./components/MatchesView').then(m => ({default: m.MatchesView})));
+const MetaView = lazy(() => import('./components/MetaView').then(m => ({default: m.MetaView})));
+const OffenseView = lazy(() => import('./components/OffenseView').then(m => ({default: m.OffenseView})));
+const Picker = lazy(() => import('./components/Picker').then(m => ({default: m.Picker})));
+const PlaymatView = lazy(() => import('./components/PlaymatView').then(m => ({default: m.PlaymatView})));
+const SpeedView = lazy(() => import('./components/SpeedView').then(m => ({default: m.SpeedView})));
+const replayLib = () => import('./lib/replay');
+
+const Loading = () => <div className="py-16 text-center text-[13px] text-faint">Loading …</div>;
 
 const PAGES = [
   {key: 'teams', label: 'Teams'},
@@ -52,7 +59,7 @@ export default function App() {
   const store = useStore();
   const {team, setSets} = store;
   const sets = team.sets;
-  const usage = USAGE[store.source] ?? USAGE[FORMAT.sources[0].key];
+  const {usage, error: usageError} = useUsage(store.source);
   const [page, setPageState] = useState<Page>(pageFromHash);
   const [selected, setSelected] = useState(0);
   // Pokémon picked for planning on the Offense, Speed and Bulk tabs.
@@ -164,7 +171,7 @@ export default function App() {
             onChange={e => store.setSource(e.target.value)}
             title="Usage data"
           >
-            {FORMAT.sources.map(s => <option key={s.key} value={s.key}>{s.label} · {USAGE[s.key].month}</option>)}
+            {FORMAT.sources.map(s => <option key={s.key} value={s.key}>{s.label} · {FORMAT.month}</option>)}
           </select>
         </div>
       </header>
@@ -236,6 +243,10 @@ export default function App() {
         </div>
       )}
 
+      {!usage ? (
+        usageError ? <p className="py-16 text-center text-[13px] text-bad">Couldn't load the usage data: {usageError}</p> : <Loading />
+      ) : (
+        <Suspense fallback={<Loading />}>
       {page === 'teams' && !teamOpen && (
         <TeamsView teams={store.teams} folders={store.folders} activeId={team.id} usage={usage}
           onOpen={id => { store.select(id); openEditor(); }}
@@ -305,16 +316,19 @@ export default function App() {
             if (board) { store.setPlaymat(board.mat); setPage('playmat'); return; }
             if (!m.replay) return;
             try {
+              const {fetchReplay, guessMe, replayPlaymat} = await replayLib();
               const r = await fetchReplay(m.replay);
-              store.setPlaymat(replayPlaymat(r, m.side ?? guessMe(r, sets, null), sets, usage));
+              store.setPlaymat(replayPlaymat(r, m.side ?? guessMe(r, sets, null), sets, usage!));
               setPage('playmat');
             } catch (e) { alert((e as Error).message); }
           }} />
       )}
       {page === 'calc' && <CalcView sets={sets} usage={usage} opp={opp} pair={calcPair} setPair={setCalcPair} />}
+        </Suspense>
+      )}
 
       <footer className={`mt-12 border-t border-line pt-4 text-[11.5px] text-faint ${page === 'playmat' ? 'hidden' : ''}`}>
-        <a className="underline hover:text-dim" href="https://www.smogon.com/stats/" target="_blank" rel="noreferrer">Smogon</a> ({usage.label}, {usage.month}) ·
+        <a className="underline hover:text-dim" href="https://www.smogon.com/stats/" target="_blank" rel="noreferrer">Smogon</a> ({usage?.label}, {usage?.month ?? FORMAT.month}) ·
         Showdown <code>champions</code> mod · @smogon/calc ·
         Portraits: <a className="underline hover:text-dim" href="https://github.com/PMDCollab/SpriteCollab" target="_blank" rel="noreferrer">PMD SpriteCollab</a> (CC BY-NC 4.0)
       </footer>
@@ -337,8 +351,10 @@ export default function App() {
             let mat: Playmat = {...shared.mat, id: undefined};
             if (shared.replay) {
               // Replays travel as their id: fetch the battle again and lay it out at the same turn.
+              const {fetchReplay, replayPlaymat, showStep} = await replayLib();
               const r = await fetchReplay(shared.replay.id);
-              const m = showStep(replayPlaymat(r, shared.replay.me, shared.mat.team ?? [], usage, shared.replay.turnNotes), shared.replay.step);
+              const u = usage ?? await loadUsage(store.source);
+              const m = showStep(replayPlaymat(r, shared.replay.me, shared.mat.team ?? [], u, shared.replay.turnNotes), shared.replay.step);
               mat = {...m, id: undefined, notes: shared.mat.notes, plans: shared.mat.plans};
             }
             store.setPlaymat(mat);

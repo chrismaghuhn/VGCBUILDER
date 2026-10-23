@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
 import {SPECIES, pct, type UsageSource} from '../lib/data';
-import {fillSpreads} from '../lib/calc';
+import {fillSpreads} from '../lib/meta';
 import {matchStats, winrate} from '../lib/matches';
 import {fetchPokepaste} from '../lib/share';
 import {battleForme, importTeam, type Folder, type PokemonSet, type Team} from '../lib/team';

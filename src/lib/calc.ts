@@ -1,6 +1,9 @@
 import {Field, Generations, Move, Pokemon, calculate} from '@smogon/calc';
 import {MOVES, SPECIES, TYPES, type StatID, type UsageSource} from './data';
-import {battleForme, parseSpread, popularSet, type PokemonSet} from './team';
+import {battleForme, type PokemonSet} from './team';
+import {metaSet} from './meta';
+
+export {fillSpreads, metaSet} from './meta';
 import {damagingMoves, defensiveMult, effectiveSpeed, roleCoverage, typeEffect, type EnemyWeather, type SpeedField} from './analysis';
 
 export const GEN = Generations.get(0);
@@ -115,20 +118,6 @@ export interface MetaThreat {
   attacks: string[];
 }
 
-/** Most common set for a usage-stats entry (Mega entries come back holding their stone). */
-export function metaSet(name: string, usage: UsageSource, takenItems: string[] = []): PokemonSet {
-  const sp = SPECIES[name];
-  const u = usage.mons[name];
-  if (!sp?.mega || !u) return popularSet(name, usage, takenItems);
-  const baseName = sp.megaOf ?? sp.base;
-  const set = popularSet(baseName, usage);
-  set.item = sp.requiredItem ?? set.item;
-  set.ability = SPECIES[baseName]?.abilities[0] ?? set.ability;
-  set.moves = u.moves.map(([m]) => m).filter(m => sp.moves.includes(m)).slice(0, 4);
-  const spread = u.spreads[0]?.[0];
-  if (spread) Object.assign(set, parseSpread(spread));
-  return set;
-}
 
 export function metaThreats(usage: UsageSource, limit = 30): MetaThreat[] {
   return Object.entries(usage.mons)
@@ -327,9 +316,3 @@ export function suggestTeammates(
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-/** Sets without spreads (open team sheets, many pastes) get the most common meta spread, marked as estimated. */
-export const fillSpreads = (team: PokemonSet[], usage: UsageSource): PokemonSet[] => team.map(s => {
-  if (Object.values(s.sps).some(v => v > 0)) return s;
-  const meta = metaSet(s.species, usage);
-  return {...s, nature: meta.nature, sps: meta.sps, item: s.item || meta.item, ability: s.ability || meta.ability, moves: s.moves.length ? s.moves : meta.moves, estimated: true};
-});
